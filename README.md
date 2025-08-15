@@ -2,6 +2,7 @@
 
 A simple MCP server for Yahoo Finance using [yfinance](https://github.com/ranaroussi/yfinance). This server provides a set of tools to fetch stock data, news, and other financial information.
 
+[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/narumiruna/yfinance-mcp)](https://archestra.ai/mcp-catalog/narumiruna__yfinance-mcp)
 <a href="https://glama.ai/mcp/servers/@narumiruna/yfinance-mcp">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@narumiruna/yfinance-mcp/badge" />
 </a>
