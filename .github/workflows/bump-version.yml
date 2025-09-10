@@ -13,12 +13,11 @@ on:
           - minor
           - patch
 
-permissions:
-  contents: write
-
 jobs:
   bump-version:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout the code
         uses: actions/checkout@v5
