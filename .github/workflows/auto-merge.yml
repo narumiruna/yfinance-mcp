@@ -1,12 +1,11 @@
-name: Dependabot auto-approve & auto-merge
+name: Dependabot Auto-Merge
 
 on:
   pull_request:
 
 permissions:
   contents: write
-  # Settings -> Actions -> General
-  # Allow GitHub Actions to create and approve pull requests
+  issues: write
   pull-requests: write
 
 jobs:
