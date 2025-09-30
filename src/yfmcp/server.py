@@ -100,11 +100,13 @@ def get_top_companies(
     if top_n < 1:
         return "top_n must be greater than 0"
 
-    s = yf.Sector(sector)
-    df = s.top_companies
+    try:
+        s = yf.Sector(sector)
+        df = s.top_companies
+    except Exception as e:
+        return json.dumps({"error": f"Failed to get top companies for sector '{sector}': {e}"})
     if df is None:
-        return f"No top companies available for {sector} sector."
-
+        return json.dumps({"error": f"No top companies available for {sector} sector."})
     return df.iloc[:top_n].to_json(orient="records")
 
 
