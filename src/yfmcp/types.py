@@ -17,17 +17,17 @@ TopType = Literal[
 
 
 Sector = Literal[
-    "basic-materials",
-    "communication-services",
-    "consumer-cyclical",
-    "consumer-defensive",
-    "energy",
-    "financial-services",
-    "healthcare",
-    "industrials",
-    "real-estate",
-    "technology",
-    "utilities",
+    "Basic Materials",
+    "Communication Services",
+    "Consumer Cyclical",
+    "Consumer Defensive",
+    "Energy",
+    "Financial Services",
+    "Healthcare",
+    "Industrials",
+    "Real Estate",
+    "Technology",
+    "Utilities",
 ]
 
 
