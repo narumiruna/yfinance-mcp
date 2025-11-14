@@ -61,3 +61,10 @@ Interval = Literal[
     "1mo",
     "3mo",
 ]
+
+
+ChartType = Literal[
+    "price_volume",
+    "vwap",
+    "volume_profile",
+]

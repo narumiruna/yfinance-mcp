@@ -43,6 +43,25 @@ A simple MCP server for Yahoo Finance using [yfinance](https://github.com/ranaro
     - `period` (string, optional): Time period to retrieve data for (e.g. '1d', '1mo', '1y'). Default is '1mo'.
     - `interval` (string, optional): Data interval frequency (e.g. '1d', '1h', '1m'). Default is '1d'.
 
+- **get_chart**
+
+  - Generate a financial chart using mplfinance showing candlestick price data with volume bars, optionally with VWAP (Volume Weighted Average Price) overlay or volume profile. Returns a base64-encoded PNG image.
+  - Inputs:
+    - `symbol` (string): The stock symbol.
+    - `chart_type` (string, optional): Type of chart to generate. Options:
+      - "price_volume" (default): Candlestick chart with volume bars
+      - "vwap": Volume Weighted Average Price chart with VWAP overlay
+      - "volume_profile": Candlestick chart with volume profile showing volume distribution by price level
+    - `period` (string, optional): Time period to retrieve data for (e.g. '1d', '5d', '1mo'). For intraday charts, use '1d' or '5d'. Default is '1d'.
+    - `interval` (string, optional): Data interval frequency. For day charts, use '1m', '2m', '5m', '15m', '30m', '60m', or '1h'. Default is '5m'.
+  - Output: JSON object containing:
+    - `image_base64`: Base64-encoded PNG image string
+    - `symbol`: The stock symbol
+    - `chart_type`: The chart type used
+    - `period`: The time period
+    - `interval`: The data interval
+    - `data_points`: Number of data points in the chart
+
 ## Usage
 
 You can use this MCP server either via uv (Python package installer) or Docker.
