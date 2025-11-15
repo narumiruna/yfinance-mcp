@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import mplfinance as mpf
 import numpy as np
 import pandas as pd
-from PIL import Image
 import yfinance as yf
 from loguru import logger
 from mcp.server.fastmcp import FastMCP
@@ -223,10 +222,11 @@ def _calculate_volume_profile(df: pd.DataFrame, bins: int = 50) -> pd.Series:
     volume_profile = pd.Series(0.0, index=price_centers)
     
     # Distribute volume for each bar based on price range
-    for idx, row in df.iterrows():
-        low = row["Low"]
-        high = row["High"]
-        volume = row["Volume"]
+    # Use itertuples() instead of iterrows() for better performance (~14x faster)
+    for row in df.itertuples():
+        low = row.Low
+        high = row.High
+        volume = row.Volume
         
         # Find bins that this bar overlaps with
         overlapping_bins = (price_centers >= low) & (price_centers <= high)
@@ -309,17 +309,11 @@ def get_chart(
             # Set overall title
             fig.suptitle(f"{symbol} - Volume Profile", fontsize=16, fontweight="bold", y=0.98)
             
-            # Save to buffer as PNG first, then convert to WebP for better compression
-            buf_png = io.BytesIO()
-            fig.savefig(buf_png, format="png", dpi=150, bbox_inches="tight")
-            buf_png.seek(0)
-            plt.close(fig)
-            
-            # Convert PNG to WebP with compression
-            img = Image.open(buf_png)
+            # Save directly to WebP format
             buf = io.BytesIO()
-            img.save(buf, format="WEBP", quality=85, method=6)
+            fig.savefig(buf, format="webp", dpi=150, bbox_inches="tight")
             buf.seek(0)
+            plt.close(fig)
             
         else:
             # Standard mplfinance chart (price_volume or vwap)
@@ -335,8 +329,8 @@ def get_chart(
             # Create style
             style = mpf.make_mpf_style(base_mpf_style="yahoo", rc={"figure.facecolor": "white"})
             
-            # Save chart to bytes buffer as PNG first, then convert to WebP
-            buf_png = io.BytesIO()
+            # Save chart directly to WebP format
+            buf = io.BytesIO()
             plot_kwargs = {
                 "type": "candle",
                 "volume": True,
@@ -344,7 +338,7 @@ def get_chart(
                 "title": f"{symbol} - {chart_type.replace('_', ' ').title()}",
                 "ylabel": "Price",
                 "ylabel_lower": "Volume",
-                "savefig": dict(fname=buf_png, format="png", dpi=150, bbox_inches="tight"),
+                "savefig": dict(fname=buf, format="webp", dpi=150, bbox_inches="tight"),
                 "show_nontrading": False,
                 "returnfig": False,
             }
@@ -352,12 +346,6 @@ def get_chart(
                 plot_kwargs["addplot"] = addplots
             
             mpf.plot(df, **plot_kwargs)
-            buf_png.seek(0)
-            
-            # Convert PNG to WebP with compression
-            img = Image.open(buf_png)
-            buf = io.BytesIO()
-            img.save(buf, format="WEBP", quality=85, method=6)
             buf.seek(0)
         
         # Encode WebP to base64 for efficient transmission
