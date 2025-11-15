@@ -7,6 +7,7 @@ from typing import Annotated
 import matplotlib
 
 matplotlib.use("Agg")  # Use non-interactive backend
+import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import mplfinance as mpf
 import numpy as np
@@ -333,7 +334,8 @@ def get_chart(
             )
 
             # Plot volume profile as horizontal bars on the right
-            colors = plt.cm.viridis(np.linspace(0, 1, len(volume_profile)))
+            viridis = cm.get_cmap("viridis")
+            colors = viridis(np.linspace(0, 1, len(volume_profile)))
             ax_profile.barh(volume_profile.index, volume_profile.values, color=colors, alpha=0.7)
             ax_profile.set_xlabel("Volume", fontsize=10)
             ax_profile.set_title("Volume Profile", fontsize=12, fontweight="bold", pad=10)
