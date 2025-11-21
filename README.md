@@ -52,7 +52,7 @@ A simple MCP server for Yahoo Finance using [yfinance](https://github.com/ranaro
 
 ## Usage
 
-You can use this MCP server either via uv (Python package installer) or Docker.
+You can use this MCP server via uv (Python package installer), Docker, or local development.
 
 ### Via uv
 
@@ -84,3 +84,25 @@ Add the following configuration to your MCP server configuration file:
   }
 }
 ```
+
+### Local Development
+
+For local development, add the following configuration to your MCP server configuration file:
+
+```json
+{
+  "mcpServers": {
+    "yfmcp": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/path/to/yfinance-mcp",
+        "yfmcp"
+      ]
+    }
+  }
+}
+```
+
+Replace `/path/to/yfinance-mcp` with the actual path to your local repository.
