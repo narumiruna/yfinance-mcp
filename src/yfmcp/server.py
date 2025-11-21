@@ -15,6 +15,7 @@ import pandas as pd
 import yfinance as yf
 from loguru import logger
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ImageContent
 from pydantic import Field
 from yfinance.const import SECTOR_INDUSTY_MAPPING
 
@@ -261,21 +262,17 @@ def get_chart(
         Period,
         Field(
             description=(
-                "Time period to retrieve data for (e.g. '1d', '5d', '1mo'). "
-                "For intraday charts, use '1d' or '5d'"
+                "Time period to retrieve data for (e.g. '1d', '5d', '1mo'). For intraday charts, use '1d' or '5d'"
             )
         ),
     ] = "1d",
     interval: Annotated[
         Interval,
         Field(
-            description=(
-                "Data interval frequency. For day charts, use '1m', '2m', '5m', "
-                "'15m', '30m', '60m', or '1h'"
-            )
+            description=("Data interval frequency. For day charts, use '1m', '2m', '5m', '15m', '30m', '60m', or '1h'")
         ),
     ] = "5m",
-) -> str:
+) -> ImageContent | str:
     """Generate a financial chart using mplfinance.
 
     Shows candlestick price data with volume, optionally with VWAP or volume profile.
@@ -292,11 +289,7 @@ def get_chart(
         )
 
         if df.empty:
-            error_msg = (
-                f"No data available for symbol {symbol} "
-                f"with period {period} and interval {interval}"
-            )
-            return json.dumps({"error": error_msg})
+            return f"No data available for symbol {symbol} with period {period} and interval {interval}"
 
         # Prepare data for mplfinance (needs OHLCV columns)
         # Ensure column names match what mplfinance expects
@@ -311,8 +304,18 @@ def get_chart(
             fig = plt.figure(figsize=(18, 10))
 
             # Create gridspec for layout: left side for candlestick+volume, right side for volume profile
-            gs = fig.add_gridspec(2, 2, width_ratios=[3.5, 1], height_ratios=[3, 1],
-                                 hspace=0.3, wspace=0.15, left=0.08, right=0.95, top=0.95, bottom=0.1)
+            gs = fig.add_gridspec(
+                2,
+                2,
+                width_ratios=[3.5, 1],
+                height_ratios=[3, 1],
+                hspace=0.3,
+                wspace=0.15,
+                left=0.08,
+                right=0.95,
+                top=0.95,
+                bottom=0.1,
+            )
 
             # Left side: candlestick chart (top) and volume bars (bottom)
             ax_price = fig.add_subplot(gs[0, 0])
@@ -358,9 +361,7 @@ def get_chart(
                 # VWAP = Sum(Price * Volume) / Sum(Volume)
                 typical_price = (df["High"] + df["Low"] + df["Close"]) / 3
                 vwap = (typical_price * df["Volume"]).cumsum() / df["Volume"].cumsum()
-                addplots.append(
-                    mpf.make_addplot(vwap, color="orange", width=2, linestyle="--", label="VWAP")
-                )
+                addplots.append(mpf.make_addplot(vwap, color="orange", width=2, linestyle="--", label="VWAP"))
 
             # Create style
             style = mpf.make_mpf_style(base_mpf_style="yahoo", rc={"figure.facecolor": "white"})
@@ -388,19 +389,14 @@ def get_chart(
         img_base64 = base64.b64encode(buf.read()).decode("utf-8")
 
         # Return as JSON with base64-encoded WebP
-        return json.dumps({
-            "image_base64": img_base64,
-            "symbol": symbol,
-            "chart_type": chart_type,
-            "period": period,
-            "interval": interval,
-            "data_points": len(df),
-            "format": "webp",
-        }, ensure_ascii=False)
-
+        return ImageContent(
+            type="image",
+            data=img_base64,
+            mimeType="image/webp",
+        )
     except Exception as e:
         logger.error("Error generating chart for {}: {}", symbol, e)
-        return json.dumps({"error": f"Failed to generate chart: {str(e)}"})
+        return f"Failed to generate chart: {e}"
 
 
 def main() -> None:
