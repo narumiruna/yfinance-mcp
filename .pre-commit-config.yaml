@@ -19,5 +19,8 @@ repos:
     hooks:
       - id: ty-check
         name: ty-check
-        entry: uv run ty check src tests
+        entry: uv run ty check
         language: python
+        types: [python]
+        pass_filenames: true
+        require_serial: false
