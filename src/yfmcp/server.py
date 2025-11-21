@@ -388,13 +388,9 @@ def get_chart(
             mpf.plot(df, **plot_kwargs)
             buf.seek(0)
 
-        # Encode WebP to base64 for efficient transmission
-        img_base64 = base64.b64encode(buf.read()).decode("utf-8")
-
-        # Return as JSON with base64-encoded WebP
         return ImageContent(
             type="image",
-            data=img_base64,
+            data=base64.b64encode(buf.read()).decode("utf-8"),
             mimeType="image/webp",
         )
     except Exception as e:
