@@ -8,6 +8,7 @@ requires-python = ">=3.12"
 dependencies = [
     "loguru>=0.7.3",
     "mcp[cli]>=1.6.0",
+    "mplfinance>=0.12.9",
     "tabulate>=0.9.0",
     "yfinance>=0.2.66",
 ]
