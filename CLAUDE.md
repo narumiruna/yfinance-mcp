@@ -31,7 +31,7 @@ uv run ty src/
 
 ## Architecture
 
-- `src/yfmcp/server.py` - Main FastMCP server with all tool implementations (`get_ticker_info`, `get_ticker_news`, `search`, `get_top`, `get_price_history`, `get_chart`)
+- `src/yfmcp/server.py` - Main FastMCP server with all tool implementations (`get_ticker_info`, `get_ticker_news`, `search`, `get_top`, `get_price_history`)
 - `src/yfmcp/types.py` - Literal type definitions for enums (Sector, TopType, Period, Interval, ChartType, SearchType)
 - Entry point: `yfmcp.server:main` via `yfmcp` command
 
