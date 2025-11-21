@@ -23,15 +23,12 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "anyio[trio]>=4.9.0",
-    "mypy>=1.13.0",
     "pip>=25.0.1",
     "pytest>=8.3.3",
     "pytest-asyncio>=0.26.0",
     "pytest-cov>=6.0.0",
     "ruff>=0.7.3",
-    "types-pyopenssl>=24.1.0.20240722",
-    "types-pyyaml>=6.0.12.20250326",
-    "types-setuptools>=78.1.0.20250329",
+    "ty>=0.0.1a27",
 ]
 
 [tool.ruff]
@@ -59,9 +56,6 @@ force-single-line = true
 
 [tool.pytest.ini_options]
 filterwarnings = ["ignore::DeprecationWarning"]
-
-[tool.mypy]
-ignore_missing_imports = true
 
 [tool.ty.rules]
 unresolved-attribute = "ignore"
