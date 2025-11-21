@@ -63,6 +63,9 @@ filterwarnings = ["ignore::DeprecationWarning"]
 [tool.mypy]
 ignore_missing_imports = true
 
+[tool.ty.rules]
+unresolved-attribute = "ignore"
+
 [tool.bumpversion]
 current_version = "0.4.8"
 tag = true
