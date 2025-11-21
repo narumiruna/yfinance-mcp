@@ -1,6 +1,6 @@
 [project]
 name = "yfmcp"
-version = "0.5.0"
+version = "0.5.1"
 description = ""
 readme = "README.md"
 authors = [{ name = "narumi", email = "toucans-cutouts0f@icloud.com" }]
@@ -61,7 +61,7 @@ filterwarnings = ["ignore::DeprecationWarning"]
 unresolved-attribute = "ignore"
 
 [tool.bumpversion]
-current_version = "0.5.0"
+current_version = "0.5.1"
 tag = true
 commit = true
 pre_commit_hooks = ["uv lock", "git add uv.lock"]
