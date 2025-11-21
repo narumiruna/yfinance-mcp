@@ -4,12 +4,6 @@ import json
 from datetime import datetime
 from typing import Annotated
 
-import matplotlib
-
-matplotlib.use("Agg")  # Use non-interactive backend
-import matplotlib.cm as cm
-import matplotlib.pyplot as plt
-import mplfinance as mpf
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -278,6 +272,15 @@ def get_chart(
     Shows candlestick price data with volume, optionally with VWAP or volume profile.
     Returns base64-encoded WebP image for efficient token usage.
     """
+
+    import matplotlib
+
+    matplotlib.use("Agg")  # Use non-interactive backend
+
+    import matplotlib.cm as cm
+    import matplotlib.pyplot as plt
+    import mplfinance as mpf
+
     try:
         ticker = yf.Ticker(symbol)
 
