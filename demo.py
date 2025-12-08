@@ -3,6 +3,7 @@ import io
 import json
 import os
 import traceback
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -13,6 +14,7 @@ from loguru import logger
 from mcp import ClientSession
 from mcp import StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.types import ListToolsResult
 from PIL import Image
 
 load_dotenv(find_dotenv(), override=True)
@@ -72,7 +74,7 @@ validate_config()
 
 
 @asynccontextmanager
-async def get_mcp_client():
+async def get_mcp_client() -> AsyncIterator[ClientSession]:
     """Create and manage MCP client connection to yfmcp server."""
     server_params = StdioServerParameters(
         command="uv",
@@ -138,7 +140,7 @@ def extract_tool_result(result: Any, tool_name: str = "chart") -> tuple[str, lis
                         image_data = png_buffer.getvalue()
                         mime_type = "image/png"
                         logger.debug(f"Converted WebP to PNG, new size: {len(image_data)} bytes")
-                    except (OSError, ValueError) as e:
+                    except Exception as e:
                         logger.warning(f"Failed to convert WebP to PNG: {e}")
                         mime_type = content.mimeType
                 else:
@@ -150,7 +152,7 @@ def extract_tool_result(result: Any, tool_name: str = "chart") -> tuple[str, lis
     return tool_result, images
 
 
-def convert_mcp_tools_to_openai_format(tools_list: Any) -> list[dict[str, Any]]:
+def convert_mcp_tools_to_openai_format(tools_list: ListToolsResult) -> list[dict[str, Any]]:
     """Convert MCP tools to OpenAI tool format."""
     tools = []
     for tool in tools_list.tools:
@@ -164,6 +166,19 @@ def convert_mcp_tools_to_openai_format(tools_list: Any) -> list[dict[str, Any]]:
         }
         tools.append(tool_def)
     return tools
+
+
+async def handle_error(error: Exception, context: str) -> None:
+    """Handle and log errors with formatted message to user.
+
+    Args:
+        error: The exception that occurred
+        context: Context description for the error (e.g., "initialization", "message handling")
+    """
+    logger.error(f"Error during {context}: {error}", exc_info=True)
+    error_details = traceback.format_exc()
+    error_message = f"Error during {context}: {error}\n\nDetails:\n```\n{error_details}\n```"
+    await cl.Message(content=error_message).send()
 
 
 @cl.on_chat_start
@@ -192,9 +207,7 @@ async def start():
         await cl.Message(content=WELCOME_MESSAGE).send()
 
     except Exception as e:
-        logger.error(f"Failed to initialize: {e}", exc_info=True)
-        error_details = traceback.format_exc()
-        await cl.Message(content=f"Failed to initialize: {e}\n\nDetails:\n```\n{error_details}\n```").send()
+        await handle_error(e, "initialization")
         raise
 
 
@@ -266,7 +279,4 @@ async def main(message: cl.Message):
         await cl.Message(content=final_message, elements=all_images if all_images else None).send()
 
     except Exception as e:
-        logger.error(f"Error handling message: {e}", exc_info=True)
-        error_details = traceback.format_exc()
-        error_message = f"An error occurred: {e}\n\nDetails:\n```\n{error_details}\n```"
-        await cl.Message(content=error_message).send()
+        await handle_error(e, "message handling")
