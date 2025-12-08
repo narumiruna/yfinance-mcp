@@ -192,7 +192,7 @@ async def start():
         tools_list = await session.list_tools()
         tools = convert_mcp_tools_to_openai_format(tools_list)
 
-        # Store MCP session and context manager for cleanup
+        # Store MCP session and context manager
         cl.user_session.set("mcp_session", session)
         cl.user_session.set("mcp_context", mcp_context)
 
@@ -214,13 +214,9 @@ async def start():
 @cl.on_chat_end
 async def end():
     """Clean up resources when chat ends."""
-    try:
-        mcp_context = cl.user_session.get("mcp_context")
-        if mcp_context:
-            await mcp_context.__aexit__(None, None, None)
-            logger.info("MCP session closed successfully")
-    except Exception as e:
-        logger.error(f"Error closing MCP session: {e}", exc_info=True)
+    # Note: MCP session cleanup is handled automatically by the context manager
+    # Attempting manual cleanup in a different async task causes issues
+    logger.info("Chat session ended")
 
 
 @cl.on_message
