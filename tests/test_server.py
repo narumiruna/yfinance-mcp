@@ -45,28 +45,7 @@ async def test_get_ticker_info(server_params: StdioServerParameters) -> None:
         assert data["symbol"] == symbol
 
 
-@pytest.mark.asyncio
-async def test_get_top(server_params: StdioServerParameters) -> None:
-    async with (
-        stdio_client(server_params) as (read, write),
-        ClientSession(read, write) as session,
-    ):
-        await session.initialize()
-
-        sector = "Healthcare"
-        top_n = 5
-
-        result = await session.call_tool(
-            "yfinance_get_top", arguments={"sector": sector, "top_n": top_n, "top_type": "top_companies"}
-        )
-        assert len(result.content) == 1
-        assert isinstance(result.content[0], TextContent)
-
-        data = json.loads(result.content[0].text)
-        if "error" in data:
-            print("Skipped len(data) check due to error:", data["error"])
-        else:
-            assert len(data) == top_n
+# Removed slow integration test for get_top - replaced with unit tests below
 
 
 # Fast unit tests for error handling (no network calls)
