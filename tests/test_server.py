@@ -95,12 +95,12 @@ async def test_error_format_no_data(server_params: StdioServerParameters) -> Non
 
 
 @pytest.mark.asyncio
-async def test_error_format_with_valid_params(server_params: StdioServerParameters) -> None:
-    """Test that valid parameters with no data available return proper error structure.
+async def test_error_format_structure(server_params: StdioServerParameters) -> None:
+    """Test error response structure contains error_code and details fields.
     
-    This tests the case where parameters are valid but the API returns no data.
-    The test verifies that when errors occur, they follow the structured format with
-    error_code and details fields.
+    This test uses an invalid/obscure symbol to reliably trigger an error response,
+    then validates that the error follows the structured format with error_code
+    and details fields. This ensures all error responses follow the same structure.
     """
     async with (
         stdio_client(server_params) as (read, write),
@@ -108,19 +108,19 @@ async def test_error_format_with_valid_params(server_params: StdioServerParamete
     ):
         await session.initialize()
 
-        # Test with a valid sector that might have no data for top_growth_companies
-        # This may succeed or return NO_DATA/API_ERROR depending on yfinance API state
+        # Use an invalid symbol to guarantee an error response
         result = await session.call_tool(
-            "yfinance_get_top",
-            arguments={"sector": "Technology", "top_n": 5, "top_type": "top_growth_companies"},
+            "yfinance_get_ticker_info",
+            arguments={"symbol": "INVALID_SYMBOL_XYZ123"},
         )
         assert len(result.content) == 1
         assert isinstance(result.content[0], TextContent)
 
         data = json.loads(result.content[0].text)
 
-        # If an error is returned, verify it has proper structure
-        if "error" in data:
-            assert "error_code" in data, "Error response should contain 'error_code' field"
-            assert "details" in data, "Error response should contain 'details' field"
-            assert isinstance(data["details"], dict), "Details should be a dictionary"
+        # Verify error structure
+        assert "error" in data, "Expected an error response for invalid symbol"
+        assert "error_code" in data, "Error response should contain 'error_code' field"
+        assert isinstance(data["error_code"], str), "error_code should be a string"
+        assert "details" in data, "Error response should contain 'details' field"
+        assert isinstance(data["details"], dict), "Details should be a dictionary"
