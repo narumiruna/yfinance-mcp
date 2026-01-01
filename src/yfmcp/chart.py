@@ -10,7 +10,7 @@ from yfmcp.types import ChartType
 # Chart configuration constants
 DEFAULT_VOLUME_PROFILE_BINS = 50  # Number of price bins for volume profile histogram
 DEFAULT_CHART_DPI = 150  # Image resolution - balance between quality and file size
-DEFAULT_CHART_FIGSIZE = (18, 10)  # Chart dimensions (width, height) in inches
+DEFAULT_CHART_FIGSIZE = (18, 10)  # Figure size (width, height) in inches, currently used for volume_profile charts
 VOLUME_PROFILE_WIDTH_RATIOS = [3.5, 1]  # Chart width ratios: [price chart, volume profile]
 VOLUME_PROFILE_HEIGHT_RATIOS = [3, 1]  # Chart height ratios: [price chart, volume bars]
 VOLUME_PROFILE_HSPACE = 0.3  # Vertical spacing between subplots
