@@ -73,6 +73,12 @@ async def get_ticker_info(
     try:
         ticker = await asyncio.to_thread(yf.Ticker, symbol)
         info = await asyncio.to_thread(lambda: ticker.info)
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        return _error(
+            f"Network error while fetching ticker info for '{symbol}'. Check your internet connection and try again.",
+            error_code="NETWORK_ERROR",
+            details={"symbol": symbol, "exception": str(exc)},
+        )
     except Exception as exc:
         return _error(
             f"Failed to fetch ticker info for '{symbol}'. Verify the symbol is correct and try again.",
@@ -136,6 +142,12 @@ async def get_ticker_news(
     try:
         ticker = await asyncio.to_thread(yf.Ticker, symbol)
         news = await asyncio.to_thread(ticker.get_news)
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        return _error(
+            f"Network error while fetching news for '{symbol}'. Check your internet connection and try again.",
+            error_code="NETWORK_ERROR",
+            details={"symbol": symbol, "exception": str(exc)},
+        )
     except Exception as exc:
         return _error(
             f"Failed to fetch news for '{symbol}'. Verify the symbol is correct.",
@@ -200,6 +212,12 @@ async def search(
     """
     try:
         s = await asyncio.to_thread(yf.Search, query)
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        return _error(
+            f"Network error during search for '{query}'. Check your internet connection and try again.",
+            error_code="NETWORK_ERROR",
+            details={"query": query, "exception": str(exc)},
+        )
     except Exception as exc:
         return _error(
             f"Search failed for '{query}'. Try simplifying your query or using different keywords.",
@@ -235,6 +253,12 @@ async def get_top_etfs(
     try:
         s = await asyncio.to_thread(yf.Sector, sector)
         etfs = await asyncio.to_thread(lambda: s.top_etfs)
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        return _error(
+            f"Network error while fetching top ETFs for '{sector}'. Check your internet connection and try again.",
+            error_code="NETWORK_ERROR",
+            details={"sector": sector, "exception": str(exc)},
+        )
     except Exception as exc:
         return _error(
             f"Failed to fetch top ETFs for '{sector}'. Verify the sector name is valid.",
@@ -266,6 +290,12 @@ async def get_top_mutual_funds(
     try:
         s = await asyncio.to_thread(yf.Sector, sector)
         funds = await asyncio.to_thread(lambda: s.top_mutual_funds)
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        return _error(
+            f"Network error while fetching top mutual funds for '{sector}'. Check your internet connection and try again.",
+            error_code="NETWORK_ERROR",
+            details={"sector": sector, "exception": str(exc)},
+        )
     except Exception as exc:
         return _error(
             f"Failed to fetch top mutual funds for '{sector}'. Verify the sector name is valid.",
@@ -296,6 +326,12 @@ async def get_top_companies(
     try:
         s = await asyncio.to_thread(yf.Sector, sector)
         df = await asyncio.to_thread(lambda: s.top_companies)
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        return _error(
+            f"Network error while fetching top companies for '{sector}'. Check your internet connection and try again.",
+            error_code="NETWORK_ERROR",
+            details={"sector": sector, "exception": str(exc)},
+        )
     except Exception as exc:
         return _error(
             f"Failed to fetch top companies for '{sector}'. Verify the sector name is valid.",
@@ -556,6 +592,17 @@ async def get_price_history(
             period=period,
             interval=interval,
             rounding=True,
+        )
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        return _error(
+            f"Network error while fetching price history for '{symbol}'. Check your internet connection and try again.",
+            error_code="NETWORK_ERROR",
+            details={
+                "symbol": symbol,
+                "period": period,
+                "interval": interval,
+                "exception": str(exc),
+            },
         )
     except Exception as exc:
         return _error(

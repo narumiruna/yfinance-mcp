@@ -83,29 +83,33 @@ async def test_error_format_no_data(server_params: StdioServerParameters) -> Non
 
         data = json.loads(result.content[0].text)
 
-        # This should be an error (either NO_DATA or API_ERROR)
-        if "error" in data:
-            assert "error_code" in data, "Error response should contain 'error_code' field"
-            assert data["error_code"] in ["NO_DATA", "API_ERROR"], f"Unexpected error_code: {data['error_code']}"
+        # This should be an error (either NO_DATA, API_ERROR, or NETWORK_ERROR)
+        assert "error" in data, "Expected an error response for invalid/obscure symbol"
+        assert "error_code" in data, "Error response should contain 'error_code' field"
+        assert data["error_code"] in ["NO_DATA", "API_ERROR", "NETWORK_ERROR"], f"Unexpected error_code: {data['error_code']}"
 
-            # Verify details field exists
-            assert "details" in data, "Error response should contain 'details' field"
-            assert isinstance(data["details"], dict), "Details should be a dictionary"
-            assert "symbol" in data["details"], "Details should contain the symbol"
+        # Verify details field exists
+        assert "details" in data, "Error response should contain 'details' field"
+        assert isinstance(data["details"], dict), "Details should be a dictionary"
+        assert "symbol" in data["details"], "Details should contain the symbol"
 
 
 @pytest.mark.asyncio
-async def test_error_format_invalid_sector(server_params: StdioServerParameters) -> None:
-    """Test that invalid sector returns INVALID_PARAMS error with proper structure."""
+async def test_error_format_with_valid_params(server_params: StdioServerParameters) -> None:
+    """Test that valid parameters with no data available return proper error structure.
+    
+    This tests the case where parameters are valid but the API returns no data.
+    The test verifies that when errors occur, they follow the structured format with
+    error_code and details fields.
+    """
     async with (
         stdio_client(server_params) as (read, write),
         ClientSession(read, write) as session,
     ):
         await session.initialize()
 
-        # Test with an invalid sector - this should trigger INVALID_PARAMS error
-        # Note: Due to Literal type validation, this may be caught earlier
-        # So we test with get_top_growth_companies which uses SECTOR_INDUSTY_MAPPING
+        # Test with a valid sector that might have no data for top_growth_companies
+        # This may succeed or return NO_DATA/API_ERROR depending on yfinance API state
         result = await session.call_tool(
             "yfinance_get_top",
             arguments={"sector": "Technology", "top_n": 5, "top_type": "top_growth_companies"},
@@ -115,7 +119,7 @@ async def test_error_format_invalid_sector(server_params: StdioServerParameters)
 
         data = json.loads(result.content[0].text)
 
-        # This should either succeed or return an error with proper structure
+        # If an error is returned, verify it has proper structure
         if "error" in data:
             assert "error_code" in data, "Error response should contain 'error_code' field"
             assert "details" in data, "Error response should contain 'details' field"
