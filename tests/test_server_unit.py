@@ -27,7 +27,7 @@ async def test_get_top_etfs_success(mock_to_thread: AsyncMock, mock_sector: Magi
     # Setup asyncio.to_thread mock
     async def mock_thread_func(func, *args):
         if callable(func):
-            return func()
+            return func(*args)
         return mock_sector_obj
 
     mock_to_thread.side_effect = mock_thread_func
@@ -52,7 +52,7 @@ async def test_get_top_etfs_no_data(mock_to_thread: AsyncMock, mock_sector: Magi
 
     async def mock_thread_func(func, *args):
         if callable(func):
-            return func()
+            return func(*args)
         return mock_sector_obj
 
     mock_to_thread.side_effect = mock_thread_func
@@ -92,7 +92,7 @@ async def test_get_top_mutual_funds_success(mock_to_thread: AsyncMock, mock_sect
 
     async def mock_thread_func(func, *args):
         if callable(func):
-            return func()
+            return func(*args)
         return mock_sector_obj
 
     mock_to_thread.side_effect = mock_thread_func
@@ -122,7 +122,7 @@ async def test_get_top_companies_success(mock_to_thread: AsyncMock, mock_sector:
 
     async def mock_thread_func(func, *args):
         if callable(func):
-            return func()
+            return func(*args)
         return mock_sector_obj
 
     mock_to_thread.side_effect = mock_thread_func
@@ -146,7 +146,7 @@ async def test_get_top_companies_empty_dataframe(mock_to_thread: AsyncMock, mock
 
     async def mock_thread_func(func, *args):
         if callable(func):
-            return func()
+            return func(*args)
         return mock_sector_obj
 
     mock_to_thread.side_effect = mock_thread_func
@@ -177,7 +177,7 @@ async def test_get_top_growth_companies_success(mock_to_thread: AsyncMock, mock_
 
     async def mock_thread_func(func, *args):
         if callable(func):
-            return func()
+            return func(*args)
         return mock_industry_obj
 
     mock_to_thread.side_effect = mock_thread_func
@@ -221,7 +221,7 @@ async def test_get_top_performing_companies_success(mock_to_thread: AsyncMock, m
 
     async def mock_thread_func(func, *args):
         if callable(func):
-            return func()
+            return func(*args)
         return mock_industry_obj
 
     mock_to_thread.side_effect = mock_thread_func
