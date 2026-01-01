@@ -13,6 +13,7 @@ from yfinance.const import SECTOR_INDUSTY_MAPPING
 
 from yfmcp.chart import generate_chart
 from yfmcp.types import ChartType
+from yfmcp.types import ErrorCode
 from yfmcp.types import Interval
 from yfmcp.types import Period
 from yfmcp.types import SearchType
@@ -27,8 +28,21 @@ def _dump_json(payload: object) -> str:
     return json.dumps(payload, ensure_ascii=False, default=str)
 
 
-def _error(message: str) -> str:
-    return _dump_json({"error": message})
+def _error(message: str, error_code: ErrorCode = "UNKNOWN_ERROR", details: dict | None = None) -> str:
+    """Create a structured error response.
+
+    Args:
+        message: Human-readable error message
+        error_code: Machine-readable error code for client handling
+        details: Optional additional error details
+
+    Returns:
+        JSON string with error information
+    """
+    error_obj = {"error": message, "error_code": error_code}
+    if details:
+        error_obj["details"] = details
+    return _dump_json(error_obj)
 
 
 @mcp.tool(
@@ -61,14 +75,18 @@ async def get_ticker_info(
         info = await asyncio.to_thread(lambda: ticker.info)
     except Exception as exc:
         return _error(
-            f"Failed to fetch ticker info for '{symbol}'. Verify the symbol is correct and try again. Error: {exc}"
+            f"Failed to fetch ticker info for '{symbol}'. Verify the symbol is correct and try again.",
+            error_code="API_ERROR",
+            details={"symbol": symbol, "exception": str(exc)},
         )
 
     if not info:
         return _error(
             f"No information available for symbol '{symbol}'. "
             "The symbol may be invalid or delisted. Try searching for the company "
-            "name using the 'yfinance_search' tool to find the correct symbol."
+            "name using the 'yfinance_search' tool to find the correct symbol.",
+            error_code="INVALID_SYMBOL",
+            details={"symbol": symbol},
         )
 
     # Convert timestamps to human-readable format when they look numeric.
@@ -119,12 +137,18 @@ async def get_ticker_news(
         ticker = await asyncio.to_thread(yf.Ticker, symbol)
         news = await asyncio.to_thread(ticker.get_news)
     except Exception as exc:
-        return _error(f"Failed to fetch news for '{symbol}'. Verify the symbol is correct. Error: {exc}")
+        return _error(
+            f"Failed to fetch news for '{symbol}'. Verify the symbol is correct.",
+            error_code="API_ERROR",
+            details={"symbol": symbol, "exception": str(exc)},
+        )
 
     if not news:
         return _error(
             f"No news articles available for '{symbol}'. "
-            "This may indicate an invalid symbol or no recent news coverage."
+            "This may indicate an invalid symbol or no recent news coverage.",
+            error_code="NO_DATA",
+            details={"symbol": symbol},
         )
 
     return _dump_json(news)
@@ -178,7 +202,9 @@ async def search(
         s = await asyncio.to_thread(yf.Search, query)
     except Exception as exc:
         return _error(
-            f"Search failed for '{query}'. Try simplifying your query or using different keywords. Error: {exc}"
+            f"Search failed for '{query}'. Try simplifying your query or using different keywords.",
+            error_code="API_ERROR",
+            details={"query": query, "exception": str(exc)},
         )
 
     match search_type.lower():
@@ -189,7 +215,11 @@ async def search(
         case "news":
             return _dump_json(s.news)
         case _:
-            return _error(f"Invalid search_type '{search_type}'. Valid options: 'all', 'quotes', 'news'.")
+            return _error(
+                f"Invalid search_type '{search_type}'. Valid options: 'all', 'quotes', 'news'.",
+                error_code="INVALID_PARAMS",
+                details={"search_type": search_type, "valid_options": ["all", "quotes", "news"]},
+            )
 
 
 async def get_top_etfs(
@@ -206,10 +236,18 @@ async def get_top_etfs(
         s = await asyncio.to_thread(yf.Sector, sector)
         etfs = await asyncio.to_thread(lambda: s.top_etfs)
     except Exception as exc:
-        return _error(f"Failed to fetch top ETFs for '{sector}'. Verify the sector name is valid. Error: {exc}")
+        return _error(
+            f"Failed to fetch top ETFs for '{sector}'. Verify the sector name is valid.",
+            error_code="API_ERROR",
+            details={"sector": sector, "exception": str(exc)},
+        )
 
     if not etfs:
-        return _error(f"No ETF data available for sector '{sector}'.")
+        return _error(
+            f"No ETF data available for sector '{sector}'.",
+            error_code="NO_DATA",
+            details={"sector": sector},
+        )
 
     result = [{"symbol": symbol, "name": name} for symbol, name in list(etfs.items())[:top_n]]
     return _dump_json(result)
@@ -229,10 +267,18 @@ async def get_top_mutual_funds(
         s = await asyncio.to_thread(yf.Sector, sector)
         funds = await asyncio.to_thread(lambda: s.top_mutual_funds)
     except Exception as exc:
-        return _error(f"Failed to fetch top mutual funds for '{sector}'. Verify the sector name is valid. Error: {exc}")
+        return _error(
+            f"Failed to fetch top mutual funds for '{sector}'. Verify the sector name is valid.",
+            error_code="API_ERROR",
+            details={"sector": sector, "exception": str(exc)},
+        )
 
     if not funds:
-        return _error(f"No mutual fund data available for sector '{sector}'.")
+        return _error(
+            f"No mutual fund data available for sector '{sector}'.",
+            error_code="NO_DATA",
+            details={"sector": sector},
+        )
 
     result = [{"symbol": symbol, "name": name} for symbol, name in list(funds.items())[:top_n]]
     return _dump_json(result)
@@ -251,10 +297,18 @@ async def get_top_companies(
         s = await asyncio.to_thread(yf.Sector, sector)
         df = await asyncio.to_thread(lambda: s.top_companies)
     except Exception as exc:
-        return _error(f"Failed to fetch top companies for '{sector}'. Verify the sector name is valid. Error: {exc}")
+        return _error(
+            f"Failed to fetch top companies for '{sector}'. Verify the sector name is valid.",
+            error_code="API_ERROR",
+            details={"sector": sector, "exception": str(exc)},
+        )
 
     if df is None or df.empty:
-        return _error(f"No company data available for '{sector}'. This sector may not have enough listed companies.")
+        return _error(
+            f"No company data available for '{sector}'. This sector may not have enough listed companies.",
+            error_code="NO_DATA",
+            details={"sector": sector},
+        )
 
     return _dump_json(df.head(top_n).to_dict(orient="records"))
 
@@ -273,7 +327,11 @@ async def get_top_growth_companies(
     try:
         industries = SECTOR_INDUSTY_MAPPING[sector]
     except KeyError:
-        return _error(f"Unknown sector '{sector}'. Valid sectors: {', '.join(SECTOR_INDUSTY_MAPPING.keys())}")
+        return _error(
+            f"Unknown sector '{sector}'. Valid sectors: {', '.join(SECTOR_INDUSTY_MAPPING.keys())}",
+            error_code="INVALID_PARAMS",
+            details={"sector": sector, "valid_sectors": list(SECTOR_INDUSTY_MAPPING.keys())},
+        )
 
     results = []
     for industry_name in industries:
@@ -295,7 +353,11 @@ async def get_top_growth_companies(
         )
 
     if not results:
-        return _error(f"No growth company data available for '{sector}'. Try a different sector or check back later.")
+        return _error(
+            f"No growth company data available for '{sector}'. Try a different sector or check back later.",
+            error_code="NO_DATA",
+            details={"sector": sector},
+        )
 
     return _dump_json(results)
 
@@ -314,7 +376,11 @@ async def get_top_performing_companies(
     try:
         industries = SECTOR_INDUSTY_MAPPING[sector]
     except KeyError:
-        return _error(f"Unknown sector '{sector}'. Valid sectors: {', '.join(SECTOR_INDUSTY_MAPPING.keys())}")
+        return _error(
+            f"Unknown sector '{sector}'. Valid sectors: {', '.join(SECTOR_INDUSTY_MAPPING.keys())}",
+            error_code="INVALID_PARAMS",
+            details={"sector": sector, "valid_sectors": list(SECTOR_INDUSTY_MAPPING.keys())},
+        )
 
     results = []
     for industry_name in industries:
@@ -336,7 +402,11 @@ async def get_top_performing_companies(
         )
 
     if not results:
-        return _error(f"No performance data available for '{sector}'. Try a different sector or check back later.")
+        return _error(
+            f"No performance data available for '{sector}'. Try a different sector or check back later.",
+            error_code="NO_DATA",
+            details={"sector": sector},
+        )
 
     return _dump_json(results)
 
@@ -401,7 +471,18 @@ async def get_top(
             return _error(
                 f"Invalid top_type '{top_type}'. "
                 "Valid options: 'top_etfs', 'top_mutual_funds', 'top_companies', "
-                "'top_growth_companies', 'top_performing_companies'."
+                "'top_growth_companies', 'top_performing_companies'.",
+                error_code="INVALID_PARAMS",
+                details={
+                    "top_type": top_type,
+                    "valid_options": [
+                        "top_etfs",
+                        "top_mutual_funds",
+                        "top_companies",
+                        "top_growth_companies",
+                        "top_performing_companies",
+                    ],
+                },
             )
 
 
@@ -479,8 +560,14 @@ async def get_price_history(
     except Exception as exc:
         return _error(
             f"Failed to fetch price history for '{symbol}'. "
-            f"Verify the symbol is correct and the period/interval combination is valid. "
-            f"Error: {exc}"
+            "Verify the symbol is correct and the period/interval combination is valid.",
+            error_code="API_ERROR",
+            details={
+                "symbol": symbol,
+                "period": period,
+                "interval": interval,
+                "exception": str(exc),
+            },
         )
 
     if df.empty:
@@ -488,7 +575,9 @@ async def get_price_history(
             f"No price data available for '{symbol}' with period='{period}' and interval='{interval}'. "
             "Common issues: (1) Invalid symbol, (2) Incompatible period/interval combination "
             "(e.g., '1m' interval requires '1d' or '5d' period), (3) Market holidays or insufficient history. "
-            "Try a longer period or daily interval."
+            "Try a longer period or daily interval.",
+            error_code="INVALID_PARAMS" if symbol else "NO_DATA",
+            details={"symbol": symbol, "period": period, "interval": interval},
         )
 
     if chart_type is None:

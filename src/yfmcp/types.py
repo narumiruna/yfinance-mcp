@@ -1,5 +1,15 @@
 from typing import Literal
 
+# Error codes for structured error handling
+ErrorCode = Literal[
+    "INVALID_SYMBOL",  # Stock symbol not found or invalid
+    "NO_DATA",  # No data available for the request
+    "API_ERROR",  # Error from yfinance API
+    "INVALID_PARAMS",  # Invalid parameter combination
+    "NETWORK_ERROR",  # Network/connection issue
+    "UNKNOWN_ERROR",  # Unexpected error
+]
+
 SearchType = Literal[
     "all",
     "quotes",
