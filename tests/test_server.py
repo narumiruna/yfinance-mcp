@@ -33,7 +33,7 @@ async def test_get_ticker_info(server_params: StdioServerParameters) -> None:
         await session.initialize()
 
         symbol = "AAPL"
-        result = await session.call_tool("get_ticker_info", arguments={"symbol": symbol})
+        result = await session.call_tool("yfinance_get_ticker_info", arguments={"symbol": symbol})
         assert len(result.content) == 1
         assert isinstance(result.content[0], TextContent)
 
@@ -54,7 +54,7 @@ async def test_get_top(server_params: StdioServerParameters) -> None:
         top_n = 5
 
         result = await session.call_tool(
-            "get_top", arguments={"sector": sector, "top_n": top_n, "top_type": "top_companies"}
+            "yfinance_get_top", arguments={"sector": sector, "top_n": top_n, "top_type": "top_companies"}
         )
         assert len(result.content) == 1
         assert isinstance(result.content[0], TextContent)
