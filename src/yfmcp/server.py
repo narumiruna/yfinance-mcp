@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime
 from typing import Annotated
@@ -39,7 +40,7 @@ def _error(message: str) -> str:
         openWorldHint=True,
     ),
 )
-def get_ticker_info(
+async def get_ticker_info(
     symbol: Annotated[str, Field(description="Stock ticker symbol (e.g., 'AAPL', 'GOOGL', 'MSFT')")],
 ) -> str:
     """Retrieve comprehensive stock data including company information, financials, trading metrics and governance.
@@ -56,8 +57,8 @@ def get_ticker_info(
     Note: Available fields vary by security type. Timestamps are converted to readable dates.
     """
     try:
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
+        ticker = await asyncio.to_thread(yf.Ticker, symbol)
+        info = await asyncio.to_thread(lambda: ticker.info)
     except Exception as exc:
         return _error(
             f"Failed to fetch ticker info for '{symbol}'. Verify the symbol is correct and try again. Error: {exc}"
@@ -96,7 +97,7 @@ def get_ticker_info(
         openWorldHint=True,
     ),
 )
-def get_ticker_news(
+async def get_ticker_news(
     symbol: Annotated[str, Field(description="Stock ticker symbol (e.g., 'AAPL', 'GOOGL', 'MSFT')")],
 ) -> str:
     """Fetch recent news articles and press releases for a specific stock.
@@ -115,8 +116,8 @@ def get_ticker_news(
     Use this to track company announcements, market sentiment, and breaking news.
     """
     try:
-        ticker = yf.Ticker(symbol)
-        news = ticker.get_news()
+        ticker = await asyncio.to_thread(yf.Ticker, symbol)
+        news = await asyncio.to_thread(ticker.get_news)
     except Exception as exc:
         return _error(f"Failed to fetch news for '{symbol}'. Verify the symbol is correct. Error: {exc}")
 
@@ -138,7 +139,7 @@ def get_ticker_news(
         openWorldHint=True,
     ),
 )
-def search(
+async def search(
     query: Annotated[str, Field(description="Search query - company name, ticker symbol, or keywords")],
     search_type: Annotated[
         SearchType,
@@ -174,7 +175,7 @@ def search(
     Use this to find ticker symbols, discover related securities, or search financial news.
     """
     try:
-        s = yf.Search(query)
+        s = await asyncio.to_thread(yf.Search, query)
     except Exception as exc:
         return _error(
             f"Search failed for '{query}'. Try simplifying your query or using different keywords. Error: {exc}"
@@ -191,7 +192,7 @@ def search(
             return _error(f"Invalid search_type '{search_type}'. Valid options: 'all', 'quotes', 'news'.")
 
 
-def get_top_etfs(
+async def get_top_etfs(
     sector: Annotated[Sector, Field(description="Market sector (e.g., 'Technology', 'Healthcare')")],
     top_n: Annotated[int, Field(description="Number of top ETFs to retrieve", ge=1)],
 ) -> str:
@@ -202,8 +203,8 @@ def get_top_etfs(
     - name: Full ETF name
     """
     try:
-        s = yf.Sector(sector)
-        etfs = s.top_etfs
+        s = await asyncio.to_thread(yf.Sector, sector)
+        etfs = await asyncio.to_thread(lambda: s.top_etfs)
     except Exception as exc:
         return _error(f"Failed to fetch top ETFs for '{sector}'. Verify the sector name is valid. Error: {exc}")
 
@@ -214,7 +215,7 @@ def get_top_etfs(
     return _dump_json(result)
 
 
-def get_top_mutual_funds(
+async def get_top_mutual_funds(
     sector: Annotated[Sector, Field(description="Market sector (e.g., 'Technology', 'Healthcare')")],
     top_n: Annotated[int, Field(description="Number of top mutual funds to retrieve", ge=1)],
 ) -> str:
@@ -225,8 +226,8 @@ def get_top_mutual_funds(
     - name: Full fund name
     """
     try:
-        s = yf.Sector(sector)
-        funds = s.top_mutual_funds
+        s = await asyncio.to_thread(yf.Sector, sector)
+        funds = await asyncio.to_thread(lambda: s.top_mutual_funds)
     except Exception as exc:
         return _error(f"Failed to fetch top mutual funds for '{sector}'. Verify the sector name is valid. Error: {exc}")
 
@@ -237,7 +238,7 @@ def get_top_mutual_funds(
     return _dump_json(result)
 
 
-def get_top_companies(
+async def get_top_companies(
     sector: Annotated[Sector, Field(description="Market sector (e.g., 'Technology', 'Healthcare')")],
     top_n: Annotated[int, Field(description="Number of top companies to retrieve", ge=1)],
 ) -> str:
@@ -247,8 +248,8 @@ def get_top_companies(
     Typically includes company identifiers, market metrics, and analyst information.
     """
     try:
-        s = yf.Sector(sector)
-        df = s.top_companies
+        s = await asyncio.to_thread(yf.Sector, sector)
+        df = await asyncio.to_thread(lambda: s.top_companies)
     except Exception as exc:
         return _error(f"Failed to fetch top companies for '{sector}'. Verify the sector name is valid. Error: {exc}")
 
@@ -258,7 +259,7 @@ def get_top_companies(
     return _dump_json(df.head(top_n).to_dict(orient="records"))
 
 
-def get_top_growth_companies(
+async def get_top_growth_companies(
     sector: Annotated[Sector, Field(description="Market sector (e.g., 'Technology', 'Healthcare')")],
     top_n: Annotated[int, Field(description="Number of top growth companies per industry", ge=1)],
 ) -> str:
@@ -277,12 +278,12 @@ def get_top_growth_companies(
     results = []
     for industry_name in industries:
         try:
-            industry = yf.Industry(industry_name)
+            industry = await asyncio.to_thread(yf.Industry, industry_name)
         except Exception as exc:
             logger.warning("Failed to load industry {}: {}", industry_name, exc)
             continue
 
-        df = industry.top_growth_companies
+        df = await asyncio.to_thread(lambda i=industry: i.top_growth_companies)
         if df is None or df.empty:
             continue
 
@@ -299,7 +300,7 @@ def get_top_growth_companies(
     return _dump_json(results)
 
 
-def get_top_performing_companies(
+async def get_top_performing_companies(
     sector: Annotated[Sector, Field(description="Market sector (e.g., 'Technology', 'Healthcare')")],
     top_n: Annotated[int, Field(description="Number of top performing companies per industry", ge=1)],
 ) -> str:
@@ -318,12 +319,12 @@ def get_top_performing_companies(
     results = []
     for industry_name in industries:
         try:
-            industry = yf.Industry(industry_name)
+            industry = await asyncio.to_thread(yf.Industry, industry_name)
         except Exception as exc:
             logger.warning("Failed to load industry {}: {}", industry_name, exc)
             continue
 
-        df = industry.top_performing_companies
+        df = await asyncio.to_thread(lambda i=industry: i.top_performing_companies)
         if df is None or df.empty:
             continue
 
@@ -349,7 +350,7 @@ def get_top_performing_companies(
         openWorldHint=True,
     ),
 )
-def get_top(
+async def get_top(
     sector: Annotated[
         Sector, Field(description="Market sector (e.g., 'Technology', 'Healthcare', 'Financial Services')")
     ],
@@ -387,15 +388,15 @@ def get_top(
     """
     match top_type:
         case "top_etfs":
-            return get_top_etfs(sector, top_n)
+            return await get_top_etfs(sector, top_n)
         case "top_mutual_funds":
-            return get_top_mutual_funds(sector, top_n)
+            return await get_top_mutual_funds(sector, top_n)
         case "top_companies":
-            return get_top_companies(sector, top_n)
+            return await get_top_companies(sector, top_n)
         case "top_growth_companies":
-            return get_top_growth_companies(sector, top_n)
+            return await get_top_growth_companies(sector, top_n)
         case "top_performing_companies":
-            return get_top_performing_companies(sector, top_n)
+            return await get_top_performing_companies(sector, top_n)
         case _:
             return _error(
                 f"Invalid top_type '{top_type}'. "
@@ -413,7 +414,7 @@ def get_top(
         openWorldHint=True,
     ),
 )
-def get_price_history(
+async def get_price_history(
     symbol: Annotated[str, Field(description="Stock ticker symbol (e.g., 'AAPL', 'GOOGL', 'MSFT')")],
     period: Annotated[
         Period,
@@ -468,8 +469,9 @@ def get_price_history(
     only work with short periods (1d, 5d).
     """
     try:
-        ticker = yf.Ticker(symbol)
-        df = ticker.history(
+        ticker = await asyncio.to_thread(yf.Ticker, symbol)
+        df = await asyncio.to_thread(
+            ticker.history,
             period=period,
             interval=interval,
             rounding=True,
