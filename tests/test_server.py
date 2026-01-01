@@ -6,6 +6,9 @@ from mcp import StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import TextContent
 
+from yfmcp.server import _error
+from yfmcp.types import ErrorCode
+
 
 @pytest.fixture
 def server_params() -> StdioServerParameters:
@@ -66,61 +69,54 @@ async def test_get_top(server_params: StdioServerParameters) -> None:
             assert len(data) == top_n
 
 
-@pytest.mark.asyncio
-async def test_error_format_no_data(server_params: StdioServerParameters) -> None:
-    """Test that NO_DATA errors contain proper error_code and details."""
-    async with (
-        stdio_client(server_params) as (read, write),
-        ClientSession(read, write) as session,
-    ):
-        await session.initialize()
-
-        # Test with a symbol that has no news (use an obscure/delisted symbol)
-        # Some symbols may not have news articles available
-        result = await session.call_tool("yfinance_get_ticker_news", arguments={"symbol": "ZZZZZ"})
-        assert len(result.content) == 1
-        assert isinstance(result.content[0], TextContent)
-
-        data = json.loads(result.content[0].text)
-
-        # This should be an error (either NO_DATA, API_ERROR, or NETWORK_ERROR)
-        assert "error" in data, "Expected an error response for invalid/obscure symbol"
-        assert "error_code" in data, "Error response should contain 'error_code' field"
-        assert data["error_code"] in ["NO_DATA", "API_ERROR", "NETWORK_ERROR"], f"Unexpected error_code: {data['error_code']}"
-
-        # Verify details field exists
-        assert "details" in data, "Error response should contain 'details' field"
-        assert isinstance(data["details"], dict), "Details should be a dictionary"
-        assert "symbol" in data["details"], "Details should contain the symbol"
+# Fast unit tests for error handling (no network calls)
 
 
-@pytest.mark.asyncio
-async def test_error_format_structure(server_params: StdioServerParameters) -> None:
-    """Test error response structure contains error_code and details fields.
-    
-    This test uses an invalid/obscure symbol to reliably trigger an error response,
-    then validates that the error follows the structured format with error_code
-    and details fields. This ensures all error responses follow the same structure.
-    """
-    async with (
-        stdio_client(server_params) as (read, write),
-        ClientSession(read, write) as session,
-    ):
-        await session.initialize()
+def test_error_function_structure() -> None:
+    """Test that _error() function creates proper error structure."""
+    # Test with minimal parameters
+    error_json = _error("Test error message")
+    data = json.loads(error_json)
+    assert "error" in data
+    assert data["error"] == "Test error message"
+    assert "error_code" in data
+    assert data["error_code"] == "UNKNOWN_ERROR"
+    assert "details" not in data  # No details when not provided
 
-        # Use an invalid symbol to guarantee an error response
-        result = await session.call_tool(
-            "yfinance_get_ticker_info",
-            arguments={"symbol": "INVALID_SYMBOL_XYZ123"},
-        )
-        assert len(result.content) == 1
-        assert isinstance(result.content[0], TextContent)
+    # Test with error_code
+    error_json = _error("Invalid symbol", error_code="INVALID_SYMBOL")
+    data = json.loads(error_json)
+    assert data["error"] == "Invalid symbol"
+    assert data["error_code"] == "INVALID_SYMBOL"
 
-        data = json.loads(result.content[0].text)
+    # Test with details
+    error_json = _error(
+        "API failed",
+        error_code="API_ERROR",
+        details={"symbol": "AAPL", "exception": "Connection timeout"},
+    )
+    data = json.loads(error_json)
+    assert data["error"] == "API failed"
+    assert data["error_code"] == "API_ERROR"
+    assert "details" in data
+    assert data["details"]["symbol"] == "AAPL"
+    assert data["details"]["exception"] == "Connection timeout"
 
-        # Verify error structure
-        assert "error" in data, "Expected an error response for invalid symbol"
-        assert "error_code" in data, "Error response should contain 'error_code' field"
-        assert isinstance(data["error_code"], str), "error_code should be a string"
-        assert "details" in data, "Error response should contain 'details' field"
-        assert isinstance(data["details"], dict), "Details should be a dictionary"
+
+def test_error_code_types() -> None:
+    """Test all error code types are handled correctly."""
+    error_codes: list[ErrorCode] = [
+        "INVALID_SYMBOL",
+        "NO_DATA",
+        "API_ERROR",
+        "INVALID_PARAMS",
+        "NETWORK_ERROR",
+        "UNKNOWN_ERROR",
+    ]
+
+    for code in error_codes:
+        error_json = _error(f"Test {code}", error_code=code, details={"test": "value"})
+        data = json.loads(error_json)
+        assert data["error_code"] == code
+        assert "details" in data
+        assert data["details"]["test"] == "value"
