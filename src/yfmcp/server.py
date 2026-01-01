@@ -67,7 +67,7 @@ def get_ticker_info(
         return _error(
             f"No information available for symbol '{symbol}'. "
             "The symbol may be invalid or delisted. Try searching for the company "
-            "name using the 'search' tool to find the correct symbol."
+            "name using the 'yfinance_search' tool to find the correct symbol."
         )
 
     # Convert timestamps to human-readable format when they look numeric.
