@@ -576,7 +576,7 @@ async def get_price_history(
             "Common issues: (1) Invalid symbol, (2) Incompatible period/interval combination "
             "(e.g., '1m' interval requires '1d' or '5d' period), (3) Market holidays or insufficient history. "
             "Try a longer period or daily interval.",
-            error_code="INVALID_PARAMS" if symbol else "NO_DATA",
+            error_code="NO_DATA",
             details={"symbol": symbol, "period": period, "interval": interval},
         )
 
