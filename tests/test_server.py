@@ -52,7 +52,7 @@ async def test_get_ticker_info(server_params: StdioServerParameters) -> None:
 
 
 def test_error_function_structure() -> None:
-    """Test that _error() function creates proper error structure."""
+    """Test that create_error_response() function creates proper error structure."""
     # Test with minimal parameters
     error_json = create_error_response("Test error message")
     data = json.loads(error_json)
