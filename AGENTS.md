@@ -29,7 +29,7 @@
 ## Testing Guidelines
 - Frameworks: `pytest` + `pytest-asyncio` (async tests).
 - Naming: files `tests/test_*.py`, test functions `test_*`.
-- Run all tests with `uv run pytest` or `make test`; target coverage with `--cov=src`.
+- Run all tests with `uv run pytest`; target coverage with `--cov=src`.
 
 ## Commit & Pull Request Guidelines
 - Use short, imperative commit subjects with no trailing period (e.g., "Fix asyncio mock", "Add test cases").
