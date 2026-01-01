@@ -292,7 +292,8 @@ async def get_top_mutual_funds(
         funds = await asyncio.to_thread(lambda: s.top_mutual_funds)
     except (ConnectionError, TimeoutError, OSError) as exc:
         return _error(
-            f"Network error while fetching top mutual funds for '{sector}'. Check your internet connection and try again.",
+            f"Network error while fetching top mutual funds for '{sector}'. "
+            "Check your internet connection and try again.",
             error_code="NETWORK_ERROR",
             details={"sector": sector, "exception": str(exc)},
         )
