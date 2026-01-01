@@ -7,8 +7,25 @@ from mcp.types import ImageContent
 
 from yfmcp.types import ChartType
 
+# Chart configuration constants
+DEFAULT_VOLUME_PROFILE_BINS = 50  # Number of price bins for volume profile histogram
+DEFAULT_CHART_DPI = 150  # Image resolution - balance between quality and file size
+DEFAULT_CHART_FIGSIZE = (18, 10)  # Figure size (width, height) in inches, currently used for volume_profile charts
+VOLUME_PROFILE_WIDTH_RATIOS = [3.5, 1]  # Chart width ratios: [price chart, volume profile]
+VOLUME_PROFILE_HEIGHT_RATIOS = [3, 1]  # Chart height ratios: [price chart, volume bars]
+VOLUME_PROFILE_HSPACE = 0.3  # Vertical spacing between subplots
+VOLUME_PROFILE_WSPACE = 0.15  # Horizontal spacing between subplots
+VOLUME_PROFILE_MARGINS = {  # Figure margins
+    "left": 0.08,
+    "right": 0.95,
+    "top": 0.95,
+    "bottom": 0.1,
+}
+VWAP_LINE_WIDTH = 2  # VWAP line thickness in points
+VOLUME_PROFILE_ALPHA = 0.7  # Transparency for volume profile bars (0=transparent, 1=opaque)
 
-def _calculate_volume_profile(df: pd.DataFrame, bins: int = 50) -> pd.Series:
+
+def _calculate_volume_profile(df: pd.DataFrame, bins: int = DEFAULT_VOLUME_PROFILE_BINS) -> pd.Series:
     """Calculate volume profile by distributing volume across price levels."""
     price_min = df["Low"].min()
     price_max = df["High"].max()
@@ -66,20 +83,17 @@ def generate_chart(symbol: str, df: pd.DataFrame, chart_type: ChartType) -> Imag
         volume_profile = _calculate_volume_profile(df)
 
         # Create a custom figure with proper layout for side-by-side charts
-        fig = plt.figure(figsize=(18, 10))
+        fig = plt.figure(figsize=DEFAULT_CHART_FIGSIZE)
 
         # Create gridspec for layout: left side for candlestick+volume, right side for volume profile
         gs = fig.add_gridspec(
             2,
             2,
-            width_ratios=[3.5, 1],
-            height_ratios=[3, 1],
-            hspace=0.3,
-            wspace=0.15,
-            left=0.08,
-            right=0.95,
-            top=0.95,
-            bottom=0.1,
+            width_ratios=VOLUME_PROFILE_WIDTH_RATIOS,
+            height_ratios=VOLUME_PROFILE_HEIGHT_RATIOS,
+            hspace=VOLUME_PROFILE_HSPACE,
+            wspace=VOLUME_PROFILE_WSPACE,
+            **VOLUME_PROFILE_MARGINS,
         )
 
         # Left side: candlestick chart (top) and volume bars (bottom)
@@ -104,7 +118,7 @@ def generate_chart(symbol: str, df: pd.DataFrame, chart_type: ChartType) -> Imag
         # Plot volume profile as horizontal bars on the right
         viridis = cm.get_cmap("viridis")
         colors = viridis(np.linspace(0, 1, len(volume_profile)))
-        ax_profile.barh(volume_profile.index, volume_profile.values, color=colors, alpha=0.7)
+        ax_profile.barh(volume_profile.index, volume_profile.values, color=colors, alpha=VOLUME_PROFILE_ALPHA)
         ax_profile.set_xlabel("Volume", fontsize=10)
         ax_profile.set_title("Volume Profile", fontsize=12, fontweight="bold", pad=10)
         ax_profile.grid(True, alpha=0.3, axis="x")
@@ -115,7 +129,7 @@ def generate_chart(symbol: str, df: pd.DataFrame, chart_type: ChartType) -> Imag
 
         # Save directly to WebP format
         buf = io.BytesIO()
-        fig.savefig(buf, format="webp", dpi=150, bbox_inches="tight")
+        fig.savefig(buf, format="webp", dpi=DEFAULT_CHART_DPI, bbox_inches="tight")
         buf.seek(0)
         plt.close(fig)
 
@@ -126,7 +140,7 @@ def generate_chart(symbol: str, df: pd.DataFrame, chart_type: ChartType) -> Imag
             # VWAP = Sum(Price * Volume) / Sum(Volume)
             typical_price = (df["High"] + df["Low"] + df["Close"]) / 3
             vwap = (typical_price * df["Volume"]).cumsum() / df["Volume"].cumsum()
-            addplots.append(mpf.make_addplot(vwap, color="orange", width=2, linestyle="--", label="VWAP"))
+            addplots.append(mpf.make_addplot(vwap, color="orange", width=VWAP_LINE_WIDTH, linestyle="--", label="VWAP"))
 
         # Create style
         style = mpf.make_mpf_style(base_mpf_style="yahoo", rc={"figure.facecolor": "white"})
@@ -140,7 +154,7 @@ def generate_chart(symbol: str, df: pd.DataFrame, chart_type: ChartType) -> Imag
             "title": f"{symbol} - {chart_type.replace('_', ' ').title()}",
             "ylabel": "Price",
             "ylabel_lower": "Volume",
-            "savefig": {"fname": buf, "format": "webp", "dpi": 150, "bbox_inches": "tight"},
+            "savefig": {"fname": buf, "format": "webp", "dpi": DEFAULT_CHART_DPI, "bbox_inches": "tight"},
             "show_nontrading": False,
             "returnfig": False,
         }
