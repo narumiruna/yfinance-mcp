@@ -6,7 +6,7 @@ from mcp import StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import TextContent
 
-from yfmcp.server import create_error_response
+from yfmcp.utils import create_error_response
 from yfmcp.types import ErrorCode
 
 
