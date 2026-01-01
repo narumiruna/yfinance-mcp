@@ -23,7 +23,7 @@
 ## Coding Style & Naming Conventions
 - Python 3.12+ only; keep imports one-per-line (ruff isort config).
 - Line length is 120; use `ruff format .` for formatting.
-- Tool functions are async and prefixed `yfinance_` (see `src/yfmcp/server.py`).
+- Tool functions are async; tool names in `@mcp.tool` are prefixed `yfinance_` (see `src/yfmcp/server.py`).
 - Use `_error()` helper for consistent JSON error responses.
 
 ## Testing Guidelines
