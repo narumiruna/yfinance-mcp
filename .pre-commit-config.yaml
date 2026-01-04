@@ -1,26 +1,21 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: check-yaml
       - id: end-of-file-fixer
       - id: trailing-whitespace
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
+    rev: v0.14.10
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.5.15
+    rev: 0.9.21
     hooks:
       - id: uv-lock
-  - repo: local
+  - repo: https://github.com/narumiruna/ty-pre-commit
+    rev: v0.0.1
     hooks:
       - id: ty-check
-        name: ty-check
-        entry: uv run ty check
-        language: python
-        types: [python]
-        pass_filenames: true
-        require_serial: false
