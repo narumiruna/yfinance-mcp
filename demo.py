@@ -100,8 +100,7 @@ async def chat_completion(messages: list[dict[str, Any]], tools: list[dict[str, 
 
     if USE_LITELLM:
         return await litellm.acompletion(**kwargs)
-    else:
-        return await openai_client.chat.completions.create(**kwargs)
+    return await openai_client.chat.completions.create(**kwargs)
 
 
 def extract_tool_result(result: Any, tool_name: str = "chart") -> tuple[str, list[cl.Image]]:

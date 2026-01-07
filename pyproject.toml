@@ -41,11 +41,15 @@ line-length = 120
 select = [
     "B",   # flake8-bugbear
     "C",   # flake8-comprehensions
+    "DTZ", # flake8-datetimez
     "E",   # pycodestyle errors
     "F",   # pyflakes
     "I",   # isort
     "N",   # pep8-naming
+    "RET", # flake8-return
+    "RUF", # ruff-specific rules
     "SIM", # flake8-simplify
+    "TRY", # flake8-try-except
     "UP",  # pyupgrade
     "W",   # pycodestyle warnings
 ]
