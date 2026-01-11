@@ -8,26 +8,26 @@ A simple MCP server for Yahoo Finance using [yfinance](https://github.com/ranaro
 
 ## Tools
 
-- **get_ticker_info**
+- **yfinance_get_ticker_info**
 
   - Retrieve stock data including company info, financials, trading metrics and governance data.
   - Inputs:
     - `symbol` (string): The stock symbol.
 
-- **get_ticker_news**
+- **yfinance_get_ticker_news**
 
   - Fetches recent news articles related to a specific stock symbol with title, content, and source details.
   - Inputs:
     - `symbol` (string): The stock symbol.
 
-- **search**
+- **yfinance_search**
 
   - Fetches and organizes search results from Yahoo Finance, including stock quotes and news articles.
   - Inputs:
     - `query` (string): The search query (ticker symbol or company name).
     - `search_type` (string): Type of search results to retrieve (options: "all", "quotes", "news").
 
-- **get_top**
+- **yfinance_get_top**
 
   - Get top entities (ETFs, mutual funds, companies, growth companies, or performing companies) in a sector.
   - Inputs:
@@ -35,7 +35,7 @@ A simple MCP server for Yahoo Finance using [yfinance](https://github.com/ranaro
     - `top_type` (string): Type of top companies to retrieve (options: "top_etfs", "top_mutual_funds", "top_companies", "top_growth_companies", "top_performing_companies").
     - `top_n` (number, optional): Number of top entities to retrieve (default 10).
 
-- **get_price_history**
+- **yfinance_get_price_history**
 
   - Fetch historical price data for a given stock symbol over a specified period and interval. Can return data as a markdown table or generate professional financial charts using mplfinance, including candlestick charts with volume bars, VWAP overlays, and volume profile analysis.
   - Inputs:
@@ -126,9 +126,12 @@ This repository includes a demo chatbot built with [Chainlit](https://github.com
 uv sync --extra dev
 ```
 
-2. Configure environment variables (create a `.env` file):
+2. Configure environment variables:
 
 ```bash
+# Recommended: start from the template
+cp .env.example .env
+
 # For OpenAI
 OPENAI_API_KEY=your_openai_api_key
 DEFAULT_MODEL=gpt-4.1
