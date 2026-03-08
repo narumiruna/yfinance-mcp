@@ -15,7 +15,7 @@ jobs:
       # https://docs.docker.com/build/ci/github-actions/manage-tags-labels/
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: |
             ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}
