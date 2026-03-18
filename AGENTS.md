@@ -1,42 +1,40 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `src/yfmcp/` holds the MCP server implementation, charting utilities, and type definitions.
-- `tests/` contains async pytest coverage for server behavior and charting.
-- `demo.py` is a Chainlit demo client for local experimentation.
-- `pyproject.toml` defines dependencies, tooling, and formatting rules.
+- `src/yfmcp/server.py`: FastMCP server, tool registration, and async wrappers around `yfinance` calls.
+- `src/yfmcp/chart.py`: chart generation (`price_volume`, `vwap`, `volume_profile`) and WebP image encoding.
+- `src/yfmcp/types.py`: shared Literal types (`SearchType`, `TopType`, `Period`, `Interval`, `ChartType`, `ErrorCode`).
+- `src/yfmcp/utils.py`: JSON helpers, including `create_error_response()`.
+- `tests/`: async pytest suite for server tools, charts, and type behavior.
+- `demo.py`: Chainlit demo client that calls MCP tools and renders chart images.
 
 ## Architecture Overview
-- `yfmcp.server` exposes FastMCP tools and wraps blocking `yfinance` calls with `asyncio.to_thread()`.
-- `yfmcp.chart` generates WebP charts for MCP responses; the demo converts them for display.
-- `yfmcp.types` centralizes Literal enums for tool inputs and validation.
+- MCP tools are exposed from `yfmcp.server` with `yfinance_`-prefixed names:
+  `yfinance_get_ticker_info`, `yfinance_get_ticker_news`, `yfinance_search`, `yfinance_get_top`, `yfinance_get_price_history`.
+- All blocking `yfinance` operations MUST be wrapped with `asyncio.to_thread()`.
+- Errors MUST be returned via `create_error_response()` with structured JSON (`error`, `error_code`, optional `details`).
+- Chart responses are returned as base64-encoded WebP `ImageContent`; tabular history uses Markdown tables.
 
 ## Build, Test, and Development Commands
 - `uv sync`: install runtime dependencies.
-- `uv sync --extra dev`: install demo and dev tooling (Chainlit, pytest, ruff, ty).
-- `uv run yfmcp`: run the MCP server locally.
-- `uv run chainlit run demo.py`: start the demo chatbot at `http://localhost:8000`.
-- `uv run ruff check .`: run linting.
-- `uv run ty check src tests`: run type checks.
-- `uv run pytest -v -s --cov=src tests`: run pytest with coverage.
+- `uv sync --extra dev`: install dev/demo dependencies.
+- `uv run yfmcp`: run the MCP server.
+- `uv run chainlit run demo.py`: run the demo chatbot.
+- `uv run ruff check .` and `uv run ruff format .`: lint/format.
+- `uv run ty check src tests`: type check.
+- `uv run pytest -v -s --cov=src tests`: full test run with coverage.
 
-## Coding Style & Naming Conventions
-- Python 3.12+ only; keep imports one-per-line (ruff isort config).
-- Line length is 120; use `ruff format .` for formatting.
-- Tool functions are async; tool names in `@mcp.tool` are prefixed `yfinance_` (see `src/yfmcp/server.py`).
-- Use `_error()` helper for consistent JSON error responses.
-
-## Testing Guidelines
-- Frameworks: `pytest` + `pytest-asyncio` (async tests).
-- Naming: files `tests/test_*.py`, test functions `test_*`.
-- Run all tests with `uv run pytest`; target coverage with `--cov=src`.
+## Coding Style & Testing Guidelines
+- Python `>=3.12`, line length `120`, one import per line (ruff isort).
+- Test files: `tests/test_*.py`; test functions: `test_*`.
+- Use `pytest` + `pytest-asyncio` for async behavior.
+- If `.pre-commit-config.yaml` exists and code/config changed, run `prek run -a` (fallback: `pre-commit run -a`).
 
 ## Commit & Pull Request Guidelines
-- Use short, imperative commit subjects with no trailing period (e.g., "Fix asyncio mock", "Add test cases").
-- If helpful, include a brief body explaining why the change is needed.
-- Keep commits focused; include tests or reasoning when behavior changes.
-- PRs should describe intent, note testing done, and include screenshots for chart/demo changes.
+- Prefer short, imperative commit subjects (for example: `Fix import order`, `Update README`).
+- Keep commits focused; include tests when behavior changes.
+- PRs should summarize intent, validation commands run, and screenshots for demo/chart UI changes.
 
 ## Configuration & Secrets
-- Demo uses `.env` for `OPENAI_API_KEY` or LiteLLM settings (see `README.md`).
-- Do not commit API keys or generated artifacts; prefer local `.env` files.
+- Use `.env` for demo credentials (`OPENAI_API_KEY` or LiteLLM settings).
+- Never commit secrets or generated artifacts.
