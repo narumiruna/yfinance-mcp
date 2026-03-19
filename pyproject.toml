@@ -1,6 +1,6 @@
 [project]
 name            = "yfmcp"
-version         = "0.8.0"
+version         = "0.8.1"
 description     = ""
 readme          = "README.md"
 requires-python = ">=3.12"
@@ -29,7 +29,7 @@ requires      = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.bumpversion]
-current_version  = "0.8.0"
+current_version  = "0.8.1"
 tag              = true
 commit           = true
 pre_commit_hooks = ["uv lock", "git add uv.lock"]
