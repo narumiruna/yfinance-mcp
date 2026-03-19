@@ -109,50 +109,6 @@ Replace `/path/to/yfinance-mcp` with the actual path to your local repository.
 
 ## Demo Chatbot
 
-This repository includes a demo chatbot built with [Chainlit](https://github.com/Chainlit/chainlit) that provides a conversational interface to the Yahoo Finance MCP server.
+The demo chatbot has moved to a dedicated repository:
 
-### Features
-
-- Interactive chat interface for querying stock information
-- Automatic display of financial charts and data visualizations
-- Support for both OpenAI and LiteLLM backends
-- Tool calling integration with the MCP server
-
-### Setup
-
-1. Install demo dependencies:
-
-```bash
-uv sync --extra dev
-```
-
-2. Configure environment variables:
-
-```bash
-# Recommended: start from the template
-cp .env.example .env
-
-# For OpenAI
-OPENAI_API_KEY=your_openai_api_key
-DEFAULT_MODEL=gpt-4.1
-
-# For LiteLLM (alternative)
-LITELLM_API_KEY=your_litellm_api_key
-LITELLM_BASE_URL=your_litellm_base_url
-DEFAULT_MODEL=gpt-4.1
-```
-
-3. Run the demo:
-
-```bash
-uv run chainlit run demo.py
-```
-
-The chatbot will be available at `http://localhost:8000`.
-
-### Example Queries
-
-- "Get AAPL stock information"
-- "Show me recent TSLA news"
-- "Display NVDA price history for the past month"
-- "Show me a candlestick chart for MSFT over the last 3 months"
+https://github.com/narumiruna/yfinance-mcp-demo
