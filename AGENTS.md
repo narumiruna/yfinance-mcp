@@ -35,5 +35,4 @@
 - PRs should summarize intent and list the validation commands run.
 
 ## Configuration & Secrets
-- Local setup may use `.env` for developer-only values, but no tracked `.env.example` is maintained in this repository.
 - Never commit secrets or generated artifacts.
