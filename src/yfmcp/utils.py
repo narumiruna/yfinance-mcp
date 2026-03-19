@@ -18,7 +18,7 @@ def create_error_response(message: str, error_code: ErrorCode = "UNKNOWN_ERROR",
     Returns:
         JSON string with error information
     """
-    error_obj = {"error": message, "error_code": error_code}
+    error_obj: dict[str, object] = {"error": message, "error_code": error_code}
     if details:
         error_obj["details"] = details
     return dump_json(error_obj)
