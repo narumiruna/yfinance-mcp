@@ -107,6 +107,10 @@ For local development, add the following configuration to your MCP server config
 
 Replace `/path/to/yfinance-mcp` with the actual path to your local repository.
 
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/narumiruna-yfinance-mcp).
+
 ## Demo Chatbot
 
 The demo chatbot has moved to a dedicated repository:
