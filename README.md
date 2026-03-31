@@ -1,63 +1,103 @@
 # Yahoo Finance MCP Server
 
-A simple MCP server for Yahoo Finance using [yfinance](https://github.com/ranaroussi/yfinance). This server provides a set of tools to fetch stock data, news, and other financial information.
+[![PyPI version](https://img.shields.io/pypi/v/yfmcp)](https://pypi.org/project/yfmcp/)
+[![Python](https://img.shields.io/pypi/pyversions/yfmcp)](https://pypi.org/project/yfmcp/)
+[![CI](https://github.com/narumiruna/yfinance-mcp/actions/workflows/python.yml/badge.svg)](https://github.com/narumiruna/yfinance-mcp/actions/workflows/python.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides AI assistants with access to Yahoo Finance data via [yfinance](https://github.com/ranaroussi/yfinance). Query stock information, financial news, sector rankings, and generate professional financial charts — all from your AI chat.
 
 <a href="https://glama.ai/mcp/servers/@narumiruna/yfinance-mcp">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@narumiruna/yfinance-mcp/badge" />
 </a>
 
+## Features
+
+- **Stock Data** — Company info, financials, valuation metrics, dividends, and trading data
+- **Financial News** — Recent news articles and press releases for any ticker
+- **Search** — Find stocks, ETFs, and news across Yahoo Finance
+- **Sector Rankings** — Top ETFs, mutual funds, companies, growth leaders, and top performers by sector
+- **Price History** — Historical OHLCV data as markdown tables or professional charts
+- **Chart Generation** — Candlestick, VWAP, and volume profile charts returned as WebP images
+
 ## Tools
 
-- **yfinance_get_ticker_info**
+### `yfinance_get_ticker_info`
 
-  - Retrieve stock data including company info, financials, trading metrics and governance data.
-  - Inputs:
-    - `symbol` (string): The stock symbol.
+Retrieve comprehensive stock data including company info, financials, trading metrics, and governance data.
 
-- **yfinance_get_ticker_news**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `symbol` | string | Yes | Stock ticker symbol (e.g. `AAPL`, `GOOGL`, `MSFT`) |
 
-  - Fetches recent news articles related to a specific stock symbol with title, content, and source details.
-  - Inputs:
-    - `symbol` (string): The stock symbol.
+**Returns:** JSON object with company details, price data, valuation metrics, trading info, dividends, financials, and performance indicators.
 
-- **yfinance_search**
+### `yfinance_get_ticker_news`
 
-  - Fetches and organizes search results from Yahoo Finance, including stock quotes and news articles.
-  - Inputs:
-    - `query` (string): The search query (ticker symbol or company name).
-    - `search_type` (string): Type of search results to retrieve (options: "all", "quotes", "news").
+Fetch recent news articles and press releases for a specific stock.
 
-- **yfinance_get_top**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `symbol` | string | Yes | Stock ticker symbol |
 
-  - Get top entities (ETFs, mutual funds, companies, growth companies, or performing companies) in a sector.
-  - Inputs:
-    - `sector` (string): The sector to get.
-    - `top_type` (string): Type of top companies to retrieve (options: "top_etfs", "top_mutual_funds", "top_companies", "top_growth_companies", "top_performing_companies").
-    - `top_n` (number, optional): Number of top entities to retrieve (default 10).
+**Returns:** JSON array of news items with title, summary, publication date, provider, URL, and thumbnail.
 
-- **yfinance_get_price_history**
+### `yfinance_search`
 
-  - Fetch historical price data for a given stock symbol over a specified period and interval. Can return data as a markdown table or generate professional financial charts using mplfinance, including candlestick charts with volume bars, VWAP overlays, and volume profile analysis.
-  - Inputs:
-    - `symbol` (string): The stock symbol.
-    - `period` (string, optional): Time period to retrieve data for (e.g. '1d', '1mo', '1y'). Default is '1mo'.
-    - `interval` (string, optional): Data interval frequency (e.g. '1d', '1h', '1m'). Default is '1d'.
-    - `chart_type` (string, optional): Type of chart to generate. If not specified, returns price data as markdown table. Options:
-      - "price_volume": Candlestick chart with volume bars
-      - "vwap": Volume Weighted Average Price chart with VWAP overlay
-      - "volume_profile": Candlestick chart with volume profile showing volume distribution by price level (displayed as a histogram on the right side)
-  - Output:
-    - If `chart_type` is not specified: Returns historical price data as a markdown table
-    - If `chart_type` is specified: Returns a base64-encoded WebP image for efficient token usage
+Search Yahoo Finance for stocks, ETFs, and news articles.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | Yes | Search query — company name, ticker symbol, or keywords |
+| `search_type` | string | Yes | `"all"` (quotes + news), `"quotes"` (stocks/ETFs only), or `"news"` (articles only) |
+
+**Returns:** Matching quotes and/or news results depending on `search_type`.
+
+### `yfinance_get_top`
+
+Get top-ranked financial entities within a market sector.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `sector` | string | Yes | Market sector (see [supported sectors](#supported-sectors) below) |
+| `top_type` | string | Yes | `"top_etfs"`, `"top_mutual_funds"`, `"top_companies"`, `"top_growth_companies"`, or `"top_performing_companies"` |
+| `top_n` | number | No | Number of results to return (default: `10`, max: `100`) |
+
+**Returns:** JSON array of top entities with relevant metrics.
+
+#### Supported Sectors
+
+`Basic Materials`, `Communication Services`, `Consumer Cyclical`, `Consumer Defensive`, `Energy`, `Financial Services`, `Healthcare`, `Industrials`, `Real Estate`, `Technology`, `Utilities`
+
+### `yfinance_get_price_history`
+
+Fetch historical price data and optionally generate technical analysis charts.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `symbol` | string | Yes | Stock ticker symbol |
+| `period` | string | No | Time range — `1d`, `5d`, `1mo`, `3mo`, `6mo`, `1y`, `2y`, `5y`, `10y`, `ytd`, `max` (default: `1mo`) |
+| `interval` | string | No | Data granularity — `1m`, `2m`, `5m`, `15m`, `30m`, `60m`, `90m`, `1h`, `1d`, `5d`, `1wk`, `1mo`, `3mo` (default: `1d`) |
+| `chart_type` | string | No | Chart to generate (omit for tabular data) |
+
+**Chart types:**
+
+| Value | Description |
+|-------|-------------|
+| `"price_volume"` | Candlestick chart with volume bars |
+| `"vwap"` | Price chart with Volume Weighted Average Price overlay |
+| `"volume_profile"` | Candlestick chart with volume distribution by price level |
+
+**Returns:**
+- Without `chart_type`: Markdown table with Date, Open, High, Low, Close, Volume, Dividends, and Stock Splits columns.
+- With `chart_type`: Base64-encoded WebP image for efficient token usage.
 
 ## Usage
 
-You can use this MCP server via uv (Python package installer), Docker, or local development.
-
-### Via uv
+### Via uv (recommended)
 
 1. [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
-2. Add the following configuration to your MCP server configuration file:
+2. Add the following to your MCP client configuration:
 
 ```json
 {
@@ -72,8 +112,6 @@ You can use this MCP server via uv (Python package installer), Docker, or local 
 
 ### Via Docker
 
-Add the following configuration to your MCP server configuration file:
-
 ```json
 {
   "mcpServers": {
@@ -85,9 +123,17 @@ Add the following configuration to your MCP server configuration file:
 }
 ```
 
-### Local Development
+### From Source
 
-For local development, add the following configuration to your MCP server configuration file:
+1. Clone the repository and install dependencies:
+
+```bash
+git clone https://github.com/narumiruna/yfinance-mcp.git
+cd yfinance-mcp
+uv sync
+```
+
+2. Add the following to your MCP client configuration:
 
 ```json
 {
@@ -105,10 +151,44 @@ For local development, add the following configuration to your MCP server config
 }
 ```
 
-Replace `/path/to/yfinance-mcp` with the actual path to your local repository.
+Replace `/path/to/yfinance-mcp` with the actual path to your cloned repository.
+
+## Development
+
+### Prerequisites
+
+- Python ≥ 3.12
+- [uv](https://docs.astral.sh/uv/) package manager
+
+### Setup
+
+```bash
+uv sync --extra dev
+```
+
+### Lint & Format
+
+```bash
+uv run ruff check .
+uv run ruff format .
+```
+
+### Type Check
+
+```bash
+uv run ty check src tests
+```
+
+### Test
+
+```bash
+uv run pytest -v -s --cov=src tests
+```
 
 ## Demo Chatbot
 
-The demo chatbot has moved to a dedicated repository:
+See the demo chatbot in its dedicated repository: [yfinance-mcp-demo](https://github.com/narumiruna/yfinance-mcp-demo)
 
-https://github.com/narumiruna/yfinance-mcp-demo
+## License
+
+This project is licensed under the [MIT License](LICENSE).
