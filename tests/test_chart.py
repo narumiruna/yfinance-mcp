@@ -1,5 +1,6 @@
 """Unit tests for chart generation functions."""
 
+import base64
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -57,11 +58,9 @@ def test_calculate_volume_profile_default_bins(sample_price_data: pd.DataFrame) 
     assert len(volume_profile) == DEFAULT_VOLUME_PROFILE_BINS
 
 
-@patch("mplfinance.plot")
 @patch("matplotlib.pyplot.figure")
 def test_generate_chart_volume_profile(
     mock_figure: MagicMock,
-    mock_mpf_plot: MagicMock,
     sample_price_data: pd.DataFrame,
 ) -> None:
     """Test volume profile chart generation."""
@@ -91,11 +90,7 @@ def test_generate_chart_volume_profile(
     assert mock_fig.savefig.called
 
 
-@patch("mplfinance.plot")
-def test_generate_chart_price_volume(
-    mock_mpf_plot: MagicMock,
-    sample_price_data: pd.DataFrame,
-) -> None:
+def test_generate_chart_price_volume(sample_price_data: pd.DataFrame) -> None:
     """Test price_volume chart generation."""
     result = generate_chart("AAPL", sample_price_data, "price_volume")
 
@@ -104,25 +99,21 @@ def test_generate_chart_price_volume(
     assert result.type == "image"
     assert hasattr(result, "mimeType")
     assert result.mimeType == "image/webp"
+    assert isinstance(result.data, str)
+    assert len(result.data) > 0
+    assert len(base64.b64decode(result.data)) > 0
 
-    # Verify mpf.plot was called
-    assert mock_mpf_plot.called
 
-
-@patch("mplfinance.plot")
-def test_generate_chart_vwap(
-    mock_mpf_plot: MagicMock,
-    sample_price_data: pd.DataFrame,
-) -> None:
+def test_generate_chart_vwap(sample_price_data: pd.DataFrame) -> None:
     """Test VWAP chart generation."""
     result = generate_chart("AAPL", sample_price_data, "vwap")
 
     # Check that result is ImageContent
     assert hasattr(result, "type")
     assert result.type == "image"
-
-    # Verify mpf.plot was called
-    assert mock_mpf_plot.called
+    assert isinstance(result.data, str)
+    assert len(result.data) > 0
+    assert len(base64.b64decode(result.data)) > 0
 
 
 def test_chart_constants() -> None:
