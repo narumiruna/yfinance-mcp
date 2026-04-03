@@ -1,6 +1,13 @@
 import base64
 import io
 
+import matplotlib
+
+matplotlib.use("Agg")  # Use non-interactive backend (must be set before pyplot is imported)
+
+import matplotlib.cm as cm
+import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from mcp.types import ImageContent
@@ -119,14 +126,6 @@ def generate_chart(symbol: str, df: pd.DataFrame, chart_type: ChartType) -> Imag
     Shows candlestick price data with volume, optionally with VWAP or volume profile.
     Returns base64-encoded WebP image for efficient token usage.
     """
-
-    import matplotlib
-
-    matplotlib.use("Agg")  # Use non-interactive backend
-
-    import matplotlib.cm as cm
-    import matplotlib.gridspec as gridspec
-    import matplotlib.pyplot as plt
 
     # Ensure required OHLCV columns exist and preserve order.
     df = df[["Open", "High", "Low", "Close", "Volume"]]

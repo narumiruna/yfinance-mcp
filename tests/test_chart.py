@@ -1,8 +1,6 @@
 """Unit tests for chart generation functions."""
 
 import base64
-from unittest.mock import MagicMock
-from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -58,22 +56,8 @@ def test_calculate_volume_profile_default_bins(sample_price_data: pd.DataFrame) 
     assert len(volume_profile) == DEFAULT_VOLUME_PROFILE_BINS
 
 
-@patch("matplotlib.pyplot.figure")
-def test_generate_chart_volume_profile(
-    mock_figure: MagicMock,
-    sample_price_data: pd.DataFrame,
-) -> None:
+def test_generate_chart_volume_profile(sample_price_data: pd.DataFrame) -> None:
     """Test volume profile chart generation."""
-    # Mock figure and its methods
-    mock_fig = MagicMock()
-    mock_figure.return_value = mock_fig
-    mock_gs = MagicMock()
-    mock_fig.add_gridspec.return_value = mock_gs
-    mock_fig.suptitle.return_value = None
-
-    # Mock savefig to avoid actual file I/O
-    mock_fig.savefig = MagicMock()
-
     result = generate_chart("AAPL", sample_price_data, "volume_profile")
 
     # Check that result is ImageContent
@@ -81,13 +65,11 @@ def test_generate_chart_volume_profile(
     assert result.type == "image"
     assert hasattr(result, "mimeType")
     assert result.mimeType == "image/webp"
-    assert hasattr(result, "data")
 
-    # Verify the figure was created with correct size
-    mock_figure.assert_called_once()
-
-    # Verify savefig was called with correct DPI
-    assert mock_fig.savefig.called
+    # Validate that a real WebP image was produced
+    raw = base64.b64decode(result.data)
+    assert len(raw) > 0
+    assert raw[:4] == b"RIFF" and raw[8:12] == b"WEBP"
 
 
 def test_generate_chart_price_volume(sample_price_data: pd.DataFrame) -> None:
