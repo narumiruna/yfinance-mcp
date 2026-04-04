@@ -1,7 +1,6 @@
 """Unit tests for chart generation functions."""
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+import base64
 
 import pandas as pd
 import pytest
@@ -57,24 +56,8 @@ def test_calculate_volume_profile_default_bins(sample_price_data: pd.DataFrame) 
     assert len(volume_profile) == DEFAULT_VOLUME_PROFILE_BINS
 
 
-@patch("mplfinance.plot")
-@patch("matplotlib.pyplot.figure")
-def test_generate_chart_volume_profile(
-    mock_figure: MagicMock,
-    mock_mpf_plot: MagicMock,
-    sample_price_data: pd.DataFrame,
-) -> None:
+def test_generate_chart_volume_profile(sample_price_data: pd.DataFrame) -> None:
     """Test volume profile chart generation."""
-    # Mock figure and its methods
-    mock_fig = MagicMock()
-    mock_figure.return_value = mock_fig
-    mock_gs = MagicMock()
-    mock_fig.add_gridspec.return_value = mock_gs
-    mock_fig.suptitle.return_value = None
-
-    # Mock savefig to avoid actual file I/O
-    mock_fig.savefig = MagicMock()
-
     result = generate_chart("AAPL", sample_price_data, "volume_profile")
 
     # Check that result is ImageContent
@@ -82,20 +65,14 @@ def test_generate_chart_volume_profile(
     assert result.type == "image"
     assert hasattr(result, "mimeType")
     assert result.mimeType == "image/webp"
-    assert hasattr(result, "data")
 
-    # Verify the figure was created with correct size
-    mock_figure.assert_called_once()
-
-    # Verify savefig was called with correct DPI
-    assert mock_fig.savefig.called
+    # Validate that a real WebP image was produced
+    raw = base64.b64decode(result.data)
+    assert len(raw) > 0
+    assert raw[:4] == b"RIFF" and raw[8:12] == b"WEBP"
 
 
-@patch("mplfinance.plot")
-def test_generate_chart_price_volume(
-    mock_mpf_plot: MagicMock,
-    sample_price_data: pd.DataFrame,
-) -> None:
+def test_generate_chart_price_volume(sample_price_data: pd.DataFrame) -> None:
     """Test price_volume chart generation."""
     result = generate_chart("AAPL", sample_price_data, "price_volume")
 
@@ -104,25 +81,21 @@ def test_generate_chart_price_volume(
     assert result.type == "image"
     assert hasattr(result, "mimeType")
     assert result.mimeType == "image/webp"
+    assert isinstance(result.data, str)
+    assert len(result.data) > 0
+    assert len(base64.b64decode(result.data)) > 0
 
-    # Verify mpf.plot was called
-    assert mock_mpf_plot.called
 
-
-@patch("mplfinance.plot")
-def test_generate_chart_vwap(
-    mock_mpf_plot: MagicMock,
-    sample_price_data: pd.DataFrame,
-) -> None:
+def test_generate_chart_vwap(sample_price_data: pd.DataFrame) -> None:
     """Test VWAP chart generation."""
     result = generate_chart("AAPL", sample_price_data, "vwap")
 
     # Check that result is ImageContent
     assert hasattr(result, "type")
     assert result.type == "image"
-
-    # Verify mpf.plot was called
-    assert mock_mpf_plot.called
+    assert isinstance(result.data, str)
+    assert len(result.data) > 0
+    assert len(base64.b64decode(result.data)) > 0
 
 
 def test_chart_constants() -> None:
