@@ -10,7 +10,7 @@
 
 ## Architecture Overview
 - MCP tools are exposed from `yfmcp.server` with `yfinance_`-prefixed names:
-  `yfinance_get_ticker_info`, `yfinance_get_ticker_news`, `yfinance_search`, `yfinance_get_top`, `yfinance_get_price_history`, `yfinance_get_financials`.
+  `yfinance_get_ticker_info`, `yfinance_get_ticker_news`, `yfinance_search`, `yfinance_get_top`, `yfinance_get_price_history`, `yfinance_get_financials`, `yfinance_get_option_chain`, `yfinance_get_option_dates`.
 - All blocking `yfinance` operations MUST be wrapped with `asyncio.to_thread()`.
 - Errors MUST be returned via `create_error_response()` with structured JSON (`error`, `error_code`, optional `details`).
 - Chart responses are returned as base64-encoded WebP `ImageContent`; tabular history uses Markdown tables.
