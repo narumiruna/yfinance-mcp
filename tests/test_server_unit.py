@@ -11,9 +11,9 @@ import pytest
 
 from yfmcp.server import _build_financials_response
 from yfmcp.server import get_financials
-from yfmcp.server import get_price_history
 from yfmcp.server import get_option_chain
 from yfmcp.server import get_option_dates
+from yfmcp.server import get_price_history
 from yfmcp.server import get_top_companies
 from yfmcp.server import get_top_etfs
 from yfmcp.server import get_top_growth_companies
