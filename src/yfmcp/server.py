@@ -27,7 +27,7 @@ from yfmcp.utils import dump_json
 mcp = FastMCP("yfinance_mcp", log_level="ERROR")
 
 
-_RETRYABLE_YFINANCE_EXCEPTIONS: tuple[type[BaseException], ...] = (
+_RETRYABLE_YFINANCE_EXCEPTIONS: tuple[type[Exception], ...] = (
     ConnectionError,
     TimeoutError,
     OSError,
@@ -35,18 +35,31 @@ _RETRYABLE_YFINANCE_EXCEPTIONS: tuple[type[BaseException], ...] = (
 )
 
 
-def _is_retryable_yfinance_error(exc: Exception) -> bool:
+def _is_retryable_yfinance_error(exc: BaseException) -> bool:
     return isinstance(exc, _RETRYABLE_YFINANCE_EXCEPTIONS)
+
+
+def _is_rate_limit_error(exc: BaseException) -> bool:
+    return isinstance(exc, YFRateLimitError)
+
+
+def _create_retryable_error_response(action: str, exc: BaseException, details: dict[str, Any]) -> str:
+    if _is_rate_limit_error(exc):
+        message = f"Rate limit reached while {action}. Try again later."
+    else:
+        message = f"Temporary network issue while {action}. Try again later."
+
+    return create_error_response(message, error_code="NETWORK_ERROR", details={**details, "exception": str(exc)})
+
+
+def _select_retryable_exception(exceptions: list[Exception]) -> BaseException:
+    rate_limit_exception = next((exc for exc in exceptions if _is_rate_limit_error(exc)), None)
+    return rate_limit_exception or exceptions[0]
 
 
 def _create_option_dates_fetch_error(symbol: str, exc: Exception, api_message: str) -> str:
     if _is_retryable_yfinance_error(exc):
-        return create_error_response(
-            f"Network error while fetching option dates for '{symbol}'. "
-            "Check your internet connection and try again.",
-            error_code="NETWORK_ERROR",
-            details={"symbol": symbol, "exception": str(exc)},
-        )
+        return _create_retryable_error_response(f"fetching option dates for '{symbol}'", exc, {"symbol": symbol})
 
     return create_error_response(
         api_message,
@@ -65,11 +78,10 @@ def _create_option_chain_fetch_error(
     if len(dates_to_fetch) == 1:
         failed_date, exc = fetch_errors[0]
         if _is_retryable_yfinance_error(exc):
-            return create_error_response(
-                f"Network error while fetching option chain for '{symbol}' on '{failed_date}'. "
-                "Check your internet connection and try again.",
-                error_code="NETWORK_ERROR",
-                details={"symbol": symbol, "expiration_date": failed_date, "exception": str(exc)},
+            return _create_retryable_error_response(
+                f"fetching option chain for '{symbol}' on '{failed_date}'",
+                exc,
+                {"symbol": symbol, "expiration_date": failed_date},
             )
 
         return create_error_response(
@@ -78,22 +90,20 @@ def _create_option_chain_fetch_error(
             details={"symbol": symbol, "expiration_date": failed_date, "exception": str(exc)},
         )
 
-    network_exception = next((exc for _, exc in fetch_errors if _is_retryable_yfinance_error(exc)), None)
-    representative_exception = network_exception or fetch_errors[0][1]
+    retryable_exceptions = [exc for _, exc in fetch_errors if _is_retryable_yfinance_error(exc)]
 
-    if network_exception is not None:
-        return create_error_response(
-            f"Network error while fetching option chain for '{symbol}'. "
-            "Check your internet connection and try again.",
-            error_code="NETWORK_ERROR",
-            details={
+    if retryable_exceptions:
+        return _create_retryable_error_response(
+            f"fetching option chain for '{symbol}'",
+            _select_retryable_exception(retryable_exceptions),
+            {
                 "symbol": symbol,
                 "dates_requested": dates_to_fetch,
                 "failed_dates": failed_dates,
-                "exception": str(representative_exception),
             },
         )
 
+    representative_exception = fetch_errors[0][1]
     return create_error_response(
         f"Failed to fetch option chain for '{symbol}' for all requested dates.",
         error_code="API_ERROR",
@@ -134,12 +144,8 @@ async def get_ticker_info(
     try:
         ticker = await asyncio.to_thread(yf.Ticker, symbol)
         info = await asyncio.to_thread(lambda: ticker.info)
-    except (ConnectionError, TimeoutError, OSError) as exc:
-        return create_error_response(
-            f"Network error while fetching ticker info for '{symbol}'. Check your internet connection and try again.",
-            error_code="NETWORK_ERROR",
-            details={"symbol": symbol, "exception": str(exc)},
-        )
+    except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
+        return _create_retryable_error_response(f"fetching ticker info for '{symbol}'", exc, {"symbol": symbol})
     except Exception as exc:
         return create_error_response(
             f"Failed to fetch ticker info for '{symbol}'. Verify the symbol is correct and try again.",
@@ -203,12 +209,8 @@ async def get_ticker_news(
     try:
         ticker = await asyncio.to_thread(yf.Ticker, symbol)
         news = await asyncio.to_thread(ticker.get_news)
-    except (ConnectionError, TimeoutError, OSError) as exc:
-        return create_error_response(
-            f"Network error while fetching news for '{symbol}'. Check your internet connection and try again.",
-            error_code="NETWORK_ERROR",
-            details={"symbol": symbol, "exception": str(exc)},
-        )
+    except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
+        return _create_retryable_error_response(f"fetching news for '{symbol}'", exc, {"symbol": symbol})
     except Exception as exc:
         return create_error_response(
             f"Failed to fetch news for '{symbol}'. Verify the symbol is correct.",
@@ -273,12 +275,8 @@ async def search(
     """
     try:
         s = await asyncio.to_thread(yf.Search, query)
-    except (ConnectionError, TimeoutError, OSError) as exc:
-        return create_error_response(
-            f"Network error during search for '{query}'. Check your internet connection and try again.",
-            error_code="NETWORK_ERROR",
-            details={"query": query, "exception": str(exc)},
-        )
+    except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
+        return _create_retryable_error_response(f"searching for '{query}'", exc, {"query": query})
     except Exception as exc:
         return create_error_response(
             f"Search failed for '{query}'. Try simplifying your query or using different keywords.",
@@ -314,12 +312,8 @@ async def get_top_etfs(
     try:
         s = await asyncio.to_thread(yf.Sector, sector)
         etfs = await asyncio.to_thread(lambda: s.top_etfs)
-    except (ConnectionError, TimeoutError, OSError) as exc:
-        return create_error_response(
-            f"Network error while fetching top ETFs for '{sector}'. Check your internet connection and try again.",
-            error_code="NETWORK_ERROR",
-            details={"sector": sector, "exception": str(exc)},
-        )
+    except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
+        return _create_retryable_error_response(f"fetching top ETFs for '{sector}'", exc, {"sector": sector})
     except Exception as exc:
         return create_error_response(
             f"Failed to fetch top ETFs for '{sector}'. Verify the sector name is valid.",
@@ -351,12 +345,11 @@ async def get_top_mutual_funds(
     try:
         s = await asyncio.to_thread(yf.Sector, sector)
         funds = await asyncio.to_thread(lambda: s.top_mutual_funds)
-    except (ConnectionError, TimeoutError, OSError) as exc:
-        return create_error_response(
-            f"Network error while fetching top mutual funds for '{sector}'. "
-            "Check your internet connection and try again.",
-            error_code="NETWORK_ERROR",
-            details={"sector": sector, "exception": str(exc)},
+    except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
+        return _create_retryable_error_response(
+            f"fetching top mutual funds for '{sector}'",
+            exc,
+            {"sector": sector},
         )
     except Exception as exc:
         return create_error_response(
@@ -388,12 +381,8 @@ async def get_top_companies(
     try:
         s = await asyncio.to_thread(yf.Sector, sector)
         df = await asyncio.to_thread(lambda: s.top_companies)
-    except (ConnectionError, TimeoutError, OSError) as exc:
-        return create_error_response(
-            f"Network error while fetching top companies for '{sector}'. Check your internet connection and try again.",
-            error_code="NETWORK_ERROR",
-            details={"sector": sector, "exception": str(exc)},
-        )
+    except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
+        return _create_retryable_error_response(f"fetching top companies for '{sector}'", exc, {"sector": sector})
     except Exception as exc:
         return create_error_response(
             f"Failed to fetch top companies for '{sector}'. Verify the sector name is valid.",
@@ -655,16 +644,11 @@ async def get_price_history(
             interval=interval,
             rounding=True,
         )
-    except (ConnectionError, TimeoutError, OSError) as exc:
-        return create_error_response(
-            f"Network error while fetching price history for '{symbol}'. Check your internet connection and try again.",
-            error_code="NETWORK_ERROR",
-            details={
-                "symbol": symbol,
-                "period": period,
-                "interval": interval,
-                "exception": str(exc),
-            },
+    except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
+        return _create_retryable_error_response(
+            f"fetching price history for '{symbol}'",
+            exc,
+            {"symbol": symbol, "period": period, "interval": interval},
         )
     except Exception as exc:
         return create_error_response(
@@ -724,12 +708,8 @@ async def get_financials(
     """
     try:
         ticker = await asyncio.to_thread(yf.Ticker, symbol)
-    except (ConnectionError, TimeoutError, OSError) as exc:
-        return create_error_response(
-            f"Network error while fetching financials for '{symbol}'. Check your internet connection and try again.",
-            error_code="NETWORK_ERROR",
-            details={"symbol": symbol, "exception": str(exc)},
-        )
+    except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
+        return _create_retryable_error_response(f"fetching financials for '{symbol}'", exc, {"symbol": symbol})
     except Exception as exc:
         return create_error_response(
             f"Failed to fetch financials for '{symbol}'. Verify the symbol is correct.",
@@ -763,11 +743,11 @@ async def get_financials(
             cash_flow = None  # TTM cash flow not directly available
 
         result = _build_financials_response(income_stmt, balance_sheet, cash_flow)
-    except (ConnectionError, TimeoutError, OSError) as exc:
-        return create_error_response(
-            f"Network error while fetching financials for '{symbol}'. Check your internet connection and try again.",
-            error_code="NETWORK_ERROR",
-            details={"symbol": symbol, "frequency": frequency, "exception": str(exc)},
+    except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
+        return _create_retryable_error_response(
+            f"fetching financials for '{symbol}'",
+            exc,
+            {"symbol": symbol, "frequency": frequency},
         )
     except Exception as exc:
         return create_error_response(
@@ -916,12 +896,8 @@ async def get_option_chain(
     """
     try:
         ticker = await asyncio.to_thread(yf.Ticker, symbol)
-    except (ConnectionError, TimeoutError, OSError) as exc:
-        return create_error_response(
-            f"Network error while fetching options for '{symbol}'. Check your internet connection and try again.",
-            error_code="NETWORK_ERROR",
-            details={"symbol": symbol, "exception": str(exc)},
-        )
+    except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
+        return _create_retryable_error_response(f"fetching options for '{symbol}'", exc, {"symbol": symbol})
     except Exception as exc:
         return create_error_response(
             f"Failed to fetch options for '{symbol}'. Verify the symbol is correct.",
