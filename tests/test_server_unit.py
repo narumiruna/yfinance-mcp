@@ -3,6 +3,7 @@
 import json
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
+from unittest.mock import PropertyMock
 from unittest.mock import patch
 
 import pandas as pd
@@ -10,6 +11,8 @@ import pytest
 
 from yfmcp.server import _build_financials_response
 from yfmcp.server import get_financials
+from yfmcp.server import get_option_chain
+from yfmcp.server import get_option_dates
 from yfmcp.server import get_price_history
 from yfmcp.server import get_top_companies
 from yfmcp.server import get_top_etfs
@@ -479,3 +482,321 @@ async def test_get_top_growth_companies_no_industries() -> None:
 
     assert "error" in data
     assert data["error_code"] == "NO_DATA"
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_dates_success(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test successful option dates retrieval."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.options = ["2025-05-02", "2025-05-09", "2025-05-16"]
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_option_dates("AAPL")
+    data = json.loads(result)
+
+    assert isinstance(data, list)
+    assert len(data) == 3
+    assert "2025-05-02" in data
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_dates_no_options(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test option dates with stock that has no options."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.options = []
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_option_dates("SPY")
+    data = json.loads(result)
+
+    assert "error" in data
+    assert data["error_code"] == "NO_DATA"
+
+
+def _option_df() -> pd.DataFrame:
+    """Build a yfinance-shaped option DataFrame."""
+    return pd.DataFrame(
+        {
+            "contractSymbol": ["AAPL250515C00150000", "AAPL250515C00160000"],
+            "strike": [150.0, 160.0],
+            "lastPrice": [10.5, 5.2],
+            "bid": [10.3, 5.0],
+            "ask": [10.7, 5.4],
+            "volume": [100, 50],
+            "openInterest": [200, 100],
+            "impliedVolatility": [0.30, 0.35],
+            "inTheMoney": [True, False],
+            "contractSize": ["REGULAR", "REGULAR"],
+            "currency": ["USD", "USD"],
+        }
+    )
+
+
+class _MockOptionChain:
+    def __init__(self):
+        self.calls = _option_df()
+        self.puts = _option_df()
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_chain_success_all(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test successful option chain retrieval for all dates and types."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.options = ["2025-05-02", "2025-05-09"]
+    mock_opt = _MockOptionChain()
+    mock_ticker_obj.option_chain.return_value = mock_opt
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_option_chain("AAPL")
+    data = json.loads(result)
+
+    assert "2025-05-02" in data
+    assert "calls" in data["2025-05-02"]
+    assert "puts" in data["2025-05-02"]
+    assert data["2025-05-02"]["calls"][0]["optionType"] == "CALL"
+    assert data["2025-05-02"]["puts"][0]["optionType"] == "PUT"
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_chain_specific_date(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test option chain with specific expiration date."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.options = ["2025-05-02", "2025-05-09"]
+    mock_opt = _MockOptionChain()
+    mock_ticker_obj.option_chain.return_value = mock_opt
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_option_chain("AAPL", expiration_date="2025-05-02")
+    data = json.loads(result)
+
+    assert "2025-05-02" in data
+    assert len(data) == 1
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_chain_invalid_date(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test option chain with invalid expiration date."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.options = ["2025-05-02", "2025-05-09"]
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_option_chain("AAPL", expiration_date="2025-06-01")
+    data = json.loads(result)
+
+    assert "error" in data
+    assert data["error_code"] == "INVALID_PARAMS"
+    assert "valid_dates" in data["details"]
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_chain_no_options(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test option chain with stock that has no options."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.options = []
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_option_chain("SPY")
+    data = json.loads(result)
+
+    assert "error" in data
+    assert data["error_code"] == "NO_DATA"
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_chain_calls_only(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test option chain returning calls only."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.options = ["2025-05-02"]
+    mock_opt = _MockOptionChain()
+    mock_ticker_obj.option_chain.return_value = mock_opt
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_option_chain("AAPL", option_type="calls")
+    data = json.loads(result)
+
+    assert "2025-05-02" in data
+    assert "calls" in data["2025-05-02"]
+    assert "puts" not in data["2025-05-02"]
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_chain_puts_only_calls_empty(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test scenario where calls are empty but puts are present."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.options = ["2025-05-02"]
+
+    mock_opt = MagicMock()
+    mock_opt.calls = pd.DataFrame()
+    mock_opt.puts = pd.DataFrame(
+        {
+            "contractSymbol": ["AAPL250515P00150000"],
+            "strike": [150.0],
+        }
+    )
+
+    mock_ticker_obj.option_chain.return_value = mock_opt
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_option_chain("AAPL", option_type="puts")
+    data = json.loads(result)
+
+    assert "2025-05-02" in data
+    assert "puts" in data["2025-05-02"]
+    assert "calls" not in data["2025-05-02"]
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_chain_no_matching_type(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test scenario where requested type (e.g. calls) has no data for any date."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.options = ["2025-05-02"]
+
+    mock_opt = MagicMock()
+    mock_opt.calls = pd.DataFrame()  # No calls
+    mock_opt.puts = pd.DataFrame({"strike": [150.0]})  # Has puts
+
+    mock_ticker_obj.option_chain.return_value = mock_opt
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    # Request calls only, but only puts exist
+    result = await get_option_chain("AAPL", option_type="calls")
+    data = json.loads(result)
+
+    assert "error" in data
+    assert data["error_code"] == "NO_DATA"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exception", [TimeoutError("timed out"), OSError("network unreachable")])
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_dates_network_error(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock, exception: Exception
+) -> None:
+    """Test network errors while fetching option dates."""
+    mock_ticker.side_effect = exception
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_option_dates("AAPL")
+    data = json.loads(result)
+
+    assert data["error_code"] == "NETWORK_ERROR"
+    assert data["details"]["symbol"] == "AAPL"
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_dates_api_error(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test generic API errors while fetching option dates."""
+    mock_ticker.side_effect = Exception("generic error")
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_option_dates("AAPL")
+    data = json.loads(result)
+
+    assert data["error_code"] == "API_ERROR"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exception", [TimeoutError("timed out"), OSError("network unreachable")])
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_chain_ticker_network_error(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock, exception: Exception
+) -> None:
+    """Test network errors during ticker creation in get_option_chain."""
+    mock_ticker.side_effect = exception
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_option_chain("AAPL")
+    data = json.loads(result)
+
+    assert data["error_code"] == "NETWORK_ERROR"
+    assert data["details"]["symbol"] == "AAPL"
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_chain_dates_fetch_error(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test error during available_dates fetch in get_option_chain."""
+    mock_ticker_obj = MagicMock()
+    # Mocking a property that raises Exception
+    type(mock_ticker_obj).options = PropertyMock(side_effect=Exception("dates failed"))
+
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_option_chain("AAPL")
+    data = json.loads(result)
+
+    assert data["error_code"] == "API_ERROR"
+    assert "Failed to fetch option dates" in data["error"]
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_chain_partial_failure(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test get_option_chain when one date fails but another succeeds."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.options = ["2025-05-02", "2025-05-09"]
+
+    mock_opt = _MockOptionChain()
+
+    # We need a custom side effect to make one call fail
+    async def side_effect(func, *args, **kwargs):
+        if not hasattr(side_effect, "ticker_created"):
+            side_effect.ticker_created = True
+            return mock_ticker_obj
+
+        if callable(func):
+            res = func()
+            if res == mock_ticker_obj.options:
+                return ["2025-05-02", "2025-05-09"]
+
+            # This is the ticker.option_chain(date) call
+            # We'll make the first date fail
+            if not hasattr(side_effect, "fetch_called"):
+                side_effect.fetch_called = True
+                raise RuntimeError("Fetch failed for first date")
+            return mock_opt
+        return mock_ticker_obj
+
+    mock_to_thread.side_effect = side_effect
+    mock_ticker.return_value = mock_ticker_obj
+
+    result = await get_option_chain("AAPL")
+    data = json.loads(result)
+
+    # Should have data for the second date but not the first
+    assert "2025-05-09" in data
+    assert "2025-05-02" not in data

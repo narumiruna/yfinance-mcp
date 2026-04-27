@@ -20,6 +20,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 - **Sector Rankings** — Top ETFs, mutual funds, companies, growth leaders, and top performers by sector
 - **Price History** — Historical OHLCV data as markdown tables or professional charts
 - **Chart Generation** — Candlestick, VWAP, and volume profile charts returned as WebP images
+- **Options Data** — Option chains with calls, puts, strike prices, IV, and expiration dates
 
 ## Tools
 
@@ -107,6 +108,38 @@ Fetch financial statements (income statement, balance sheet, and cash flow) with
 - **Income Statement fields**: EBIT, Net Income, Tax Provision, Pretax Income, Interest Expense, Total Revenue, Operating Income, EBITDA, Normalized Income
 - **Balance Sheet fields**: Stockholders Equity, Total Debt, Cash And Cash Equivalents, Invested Capital, Net Debt, Total Assets, Total Liabilities Net Minority Interest, Net Tangible Assets, Tangible Book Value
 - **Cash Flow fields**: Operating Cash Flow, Free Cash Flow, Capital Expenditure, Net Income From Continuing Operations, Depreciation And Amortization, Change In Working Capital, Cash Dividends Paid
+
+### `yfinance_get_option_dates`
+
+Fetch available option expiration dates for a stock.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `symbol` | string | Yes | Stock ticker symbol (e.g. `AAPL`, `MSFT`) |
+
+**Returns:** JSON array of expiration dates in YYYY-MM-DD format.
+
+### `yfinance_get_option_chain`
+
+Fetch option chain data (calls and puts) for a stock with available strike prices.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `symbol` | string | Yes | Stock ticker symbol |
+| `expiration_date` | string | No | Option expiration date in YYYY-MM-DD format. Omit to fetch all dates. |
+| `option_type` | string | No | `"calls"`, `"puts"`, or `"all"` (default: `"all"`) |
+
+**Returns:** JSON object keyed by expiration date, with calls and/or puts data including:
+- `contractSymbol`: Option contract identifier
+- `strike`: Strike price
+- `lastPrice`: Last traded price
+- `bid`/`ask`: Bid and ask prices
+- `volume`: Trading volume
+- `openInterest`: Open interest
+- `impliedVolatility`: IV
+- `inTheMoney`: Whether option is ITM
+- `contractSize`: Contract size (REGULAR)
+- `currency`: Currency (USD)
 
 ## Usage
 

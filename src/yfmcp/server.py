@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime
 from typing import Annotated
+from typing import Any
 
 import yfinance as yf
 from loguru import logger
@@ -13,6 +14,7 @@ from yfinance.const import SECTOR_INDUSTY_MAPPING
 from yfmcp.chart import generate_chart
 from yfmcp.types import ChartType
 from yfmcp.types import Interval
+from yfmcp.types import OptionChainType
 from yfmcp.types import Period
 from yfmcp.types import SearchType
 from yfmcp.types import Sector
@@ -761,6 +763,185 @@ def _build_financials_response(income_stmt, balance_sheet, cash_flow=None) -> di
             result["cash_flow"][field] = {str(col.date()): cash_flow.loc[field, col] for col in cash_flow.columns}
 
     return result
+
+
+async def _fetch_option_chain_for_date(
+    ticker: yf.Ticker,
+    date: str,
+    option_type: OptionChainType,
+) -> dict[str, Any]:
+    """Fetch option chain for a single expiration date."""
+    try:
+        opt = await asyncio.to_thread(lambda d=date: ticker.option_chain(d))
+    except Exception as exc:
+        logger.warning("Failed to fetch option chain for {} {}: {}", ticker, date, exc)
+        return {}
+
+    calls_df = opt.calls
+    puts_df = opt.puts
+    date_data: dict[str, Any] = {}
+
+    if calls_df is not None and not calls_df.empty and option_type in {"all", "calls"}:
+        calls_df = calls_df.copy()
+        calls_df["optionType"] = "CALL"
+        date_data["calls"] = calls_df.to_dict(orient="records")
+
+    if puts_df is not None and not puts_df.empty and option_type in {"all", "puts"}:
+        puts_df = puts_df.copy()
+        puts_df["optionType"] = "PUT"
+        date_data["puts"] = puts_df.to_dict(orient="records")
+
+    return {date: date_data} if date_data else {}
+
+
+@mcp.tool(
+    name="yfinance_get_option_chain",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
+async def get_option_chain(
+    symbol: Annotated[str, Field(description="Stock ticker symbol (e.g., 'AAPL', 'GOOGL', 'MSFT')")],
+    expiration_date: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Option expiration date in YYYY-MM-DD format. "
+                "Use the 'yfinance_get_option_dates' tool to find available dates, "
+                "or omit to fetch all available expiration dates."
+            )
+        ),
+    ] = None,
+    option_type: Annotated[
+        OptionChainType,
+        Field(description=("Which options to return: 'calls', 'puts', or 'all' (both calls and puts).")),
+    ] = "all",
+) -> str:
+    """Fetch option chain data (calls and puts) for a stock with available strike prices.
+
+    Returns JSON with calls and/or puts data for each expiration date.
+
+    JSON fields include:
+    - contractSymbol: Option contract identifier
+    - strike: Strike price
+    - lastPrice: Last traded price
+    - bid/ask: Bid and ask prices
+    - volume: Trading volume
+    - openInterest: Open interest
+    - impliedVolatility: Implied volatility (IV)
+    - inTheMoney: Whether option is ITM
+    - contractSize: Contract size (REGULAR)
+    - currency: Currency (USD)
+
+    Use this to analyze options pricing, IV surfaces, and strike levels.
+    """
+    try:
+        ticker = await asyncio.to_thread(yf.Ticker, symbol)
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        return create_error_response(
+            f"Network error while fetching options for '{symbol}'. Check your internet connection and try again.",
+            error_code="NETWORK_ERROR",
+            details={"symbol": symbol, "exception": str(exc)},
+        )
+    except Exception as exc:
+        return create_error_response(
+            f"Failed to fetch options for '{symbol}'. Verify the symbol is correct.",
+            error_code="API_ERROR",
+            details={"symbol": symbol, "exception": str(exc)},
+        )
+
+    try:
+        available_dates = await asyncio.to_thread(lambda: ticker.options)
+    except Exception as exc:
+        return create_error_response(
+            f"Failed to fetch option dates for '{symbol}'. The symbol may not have options.",
+            error_code="API_ERROR",
+            details={"symbol": symbol, "exception": str(exc)},
+        )
+
+    if not available_dates:
+        return create_error_response(
+            f"No options available for symbol '{symbol}'. "
+            "This symbol may not have listed options (e.g., ETFs, stocks without options).",
+            error_code="NO_DATA",
+            details={"symbol": symbol},
+        )
+
+    if expiration_date is not None and expiration_date not in available_dates:
+        return create_error_response(
+            f"Invalid expiration date '{expiration_date}' for '{symbol}'. Valid dates: {', '.join(available_dates)}",
+            error_code="INVALID_PARAMS",
+            details={
+                "symbol": symbol,
+                "expiration_date": expiration_date,
+                "valid_dates": available_dates,
+            },
+        )
+
+    dates_to_fetch = [expiration_date] if expiration_date else available_dates
+    result: dict[str, Any] = {}
+
+    for date in dates_to_fetch:
+        date_result = await _fetch_option_chain_for_date(ticker, date, option_type)
+        result.update(date_result)
+
+    if not result:
+        return create_error_response(
+            f"No option data retrieved for '{symbol}'.",
+            error_code="NO_DATA",
+            details={"symbol": symbol, "dates_requested": list(dates_to_fetch)},
+        )
+
+    return dump_json(result)
+
+
+@mcp.tool(
+    name="yfinance_get_option_dates",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
+async def get_option_dates(
+    symbol: Annotated[str, Field(description="Stock ticker symbol (e.g., 'AAPL', 'GOOGL', 'MSFT')")],
+) -> str:
+    """Fetch available option expiration dates for a stock.
+
+    Returns JSON array of expiration dates in YYYY-MM-DD format.
+
+    Use these dates with the 'yfinance_get_option_chain' tool to fetch
+    the options chain for a specific date.
+    """
+    try:
+        ticker = await asyncio.to_thread(yf.Ticker, symbol)
+        dates = await asyncio.to_thread(lambda: ticker.options)
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        return create_error_response(
+            f"Network error while fetching option dates for '{symbol}'. Check your internet connection and try again.",
+            error_code="NETWORK_ERROR",
+            details={"symbol": symbol, "exception": str(exc)},
+        )
+    except Exception as exc:
+        return create_error_response(
+            f"Failed to fetch option dates for '{symbol}'. Verify the symbol is correct.",
+            error_code="API_ERROR",
+            details={"symbol": symbol, "exception": str(exc)},
+        )
+
+    if not dates:
+        return create_error_response(
+            f"No options available for symbol '{symbol}'. "
+            "This symbol may not have listed options (e.g., ETFs, stocks without options).",
+            error_code="NO_DATA",
+            details={"symbol": symbol},
+        )
+
+    return dump_json(dates)
 
 
 def main() -> None:

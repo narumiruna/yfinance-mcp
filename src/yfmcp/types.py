@@ -78,3 +78,9 @@ ChartType = Literal[
     "vwap",
     "volume_profile",
 ]
+
+OptionChainType = Literal[
+    "calls",
+    "puts",
+    "all",
+]
