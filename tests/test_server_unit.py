@@ -37,6 +37,12 @@ async def _run_to_thread(func, *args, **kwargs):
     return func
 
 
+def _expected_retryable_error(action: str, exception: Exception) -> str:
+    if isinstance(exception, YFRateLimitError):
+        return f"Rate limit reached while {action}. Try again later."
+    return f"Temporary network issue while {action}. Try again later."
+
+
 class _FinancialsReadErrorTicker:
     @property
     def income_stmt(self):
@@ -189,7 +195,10 @@ async def test_get_financials_no_data(mock_to_thread: AsyncMock, mock_ticker: Ma
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("exception", [TimeoutError("timed out"), OSError("network unreachable")])
+@pytest.mark.parametrize(
+    "exception",
+    [TimeoutError("timed out"), OSError("network unreachable"), YFRateLimitError()],
+)
 @patch("yfmcp.server.yf.Ticker")
 @patch("yfmcp.server.asyncio.to_thread")
 async def test_get_financials_ticker_creation_network_error(
@@ -203,6 +212,7 @@ async def test_get_financials_ticker_creation_network_error(
     data = json.loads(result)
 
     assert data["error_code"] == "NETWORK_ERROR"
+    assert data["error"] == _expected_retryable_error("fetching financials for 'AAPL'", exception)
     assert data["details"]["symbol"] == "AAPL"
     assert data["details"]["exception"] == str(exception)
 
@@ -537,7 +547,7 @@ async def test_get_option_dates_options_network_error(
     data = json.loads(result)
 
     assert data["error_code"] == "NETWORK_ERROR"
-    assert "Network error while fetching option dates" in data["error"]
+    assert data["error"] == _expected_retryable_error("fetching option dates for 'AAPL'", exception)
 
 
 def _option_df() -> pd.DataFrame:
@@ -715,7 +725,10 @@ async def test_get_option_chain_no_matching_type(mock_to_thread: AsyncMock, mock
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("exception", [TimeoutError("timed out"), OSError("network unreachable")])
+@pytest.mark.parametrize(
+    "exception",
+    [TimeoutError("timed out"), OSError("network unreachable"), YFRateLimitError()],
+)
 @patch("yfmcp.server.yf.Ticker")
 @patch("yfmcp.server.asyncio.to_thread")
 async def test_get_option_dates_network_error(
@@ -729,6 +742,7 @@ async def test_get_option_dates_network_error(
     data = json.loads(result)
 
     assert data["error_code"] == "NETWORK_ERROR"
+    assert data["error"] == _expected_retryable_error("fetching option dates for 'AAPL'", exception)
     assert data["details"]["symbol"] == "AAPL"
 
 
@@ -747,7 +761,10 @@ async def test_get_option_dates_api_error(mock_to_thread: AsyncMock, mock_ticker
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("exception", [TimeoutError("timed out"), OSError("network unreachable")])
+@pytest.mark.parametrize(
+    "exception",
+    [TimeoutError("timed out"), OSError("network unreachable"), YFRateLimitError()],
+)
 @patch("yfmcp.server.yf.Ticker")
 @patch("yfmcp.server.asyncio.to_thread")
 async def test_get_option_chain_ticker_network_error(
@@ -761,6 +778,7 @@ async def test_get_option_chain_ticker_network_error(
     data = json.loads(result)
 
     assert data["error_code"] == "NETWORK_ERROR"
+    assert data["error"] == _expected_retryable_error("fetching options for 'AAPL'", exception)
     assert data["details"]["symbol"] == "AAPL"
 
 
@@ -801,7 +819,7 @@ async def test_get_option_chain_dates_fetch_network_error(
     data = json.loads(result)
 
     assert data["error_code"] == "NETWORK_ERROR"
-    assert "Network error while fetching option dates" in data["error"]
+    assert data["error"] == _expected_retryable_error("fetching option dates for 'AAPL'", exception)
 
 
 @pytest.mark.asyncio
@@ -862,6 +880,10 @@ async def test_get_option_chain_specific_date_fetch_network_error(
     data = json.loads(result)
 
     assert data["error_code"] == "NETWORK_ERROR"
+    assert data["error"] == _expected_retryable_error(
+        "fetching option chain for 'AAPL' on '2025-05-02'",
+        exception,
+    )
     assert data["details"]["expiration_date"] == "2025-05-02"
 
 
@@ -883,4 +905,5 @@ async def test_get_option_chain_all_dates_fetch_network_error(
     data = json.loads(result)
 
     assert data["error_code"] == "NETWORK_ERROR"
+    assert data["error"] == _expected_retryable_error("fetching option chain for 'AAPL'", exception)
     assert data["details"]["failed_dates"] == ["2025-05-02", "2025-05-09"]
