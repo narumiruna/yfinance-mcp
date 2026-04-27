@@ -10,6 +10,7 @@ from mcp.types import ImageContent
 from mcp.types import ToolAnnotations
 from pydantic import Field
 from yfinance.const import SECTOR_INDUSTY_MAPPING
+from yfinance.exceptions import YFRateLimitError
 
 from yfmcp.chart import generate_chart
 from yfmcp.types import ChartType
@@ -24,6 +25,85 @@ from yfmcp.utils import dump_json
 
 # https://github.com/jlowin/fastmcp/issues/81#issuecomment-2714245145
 mcp = FastMCP("yfinance_mcp", log_level="ERROR")
+
+
+_RETRYABLE_YFINANCE_EXCEPTIONS: tuple[type[BaseException], ...] = (
+    ConnectionError,
+    TimeoutError,
+    OSError,
+    YFRateLimitError,
+)
+
+
+def _is_retryable_yfinance_error(exc: Exception) -> bool:
+    return isinstance(exc, _RETRYABLE_YFINANCE_EXCEPTIONS)
+
+
+def _create_option_dates_fetch_error(symbol: str, exc: Exception, api_message: str) -> str:
+    if _is_retryable_yfinance_error(exc):
+        return create_error_response(
+            f"Network error while fetching option dates for '{symbol}'. "
+            "Check your internet connection and try again.",
+            error_code="NETWORK_ERROR",
+            details={"symbol": symbol, "exception": str(exc)},
+        )
+
+    return create_error_response(
+        api_message,
+        error_code="API_ERROR",
+        details={"symbol": symbol, "exception": str(exc)},
+    )
+
+
+def _create_option_chain_fetch_error(
+    symbol: str,
+    dates_to_fetch: list[str],
+    fetch_errors: list[tuple[str, Exception]],
+) -> str:
+    failed_dates = [date for date, _ in fetch_errors]
+
+    if len(dates_to_fetch) == 1:
+        failed_date, exc = fetch_errors[0]
+        if _is_retryable_yfinance_error(exc):
+            return create_error_response(
+                f"Network error while fetching option chain for '{symbol}' on '{failed_date}'. "
+                "Check your internet connection and try again.",
+                error_code="NETWORK_ERROR",
+                details={"symbol": symbol, "expiration_date": failed_date, "exception": str(exc)},
+            )
+
+        return create_error_response(
+            f"Failed to fetch option chain for '{symbol}' on '{failed_date}'.",
+            error_code="API_ERROR",
+            details={"symbol": symbol, "expiration_date": failed_date, "exception": str(exc)},
+        )
+
+    network_exception = next((exc for _, exc in fetch_errors if _is_retryable_yfinance_error(exc)), None)
+    representative_exception = network_exception or fetch_errors[0][1]
+
+    if network_exception is not None:
+        return create_error_response(
+            f"Network error while fetching option chain for '{symbol}'. "
+            "Check your internet connection and try again.",
+            error_code="NETWORK_ERROR",
+            details={
+                "symbol": symbol,
+                "dates_requested": dates_to_fetch,
+                "failed_dates": failed_dates,
+                "exception": str(representative_exception),
+            },
+        )
+
+    return create_error_response(
+        f"Failed to fetch option chain for '{symbol}' for all requested dates.",
+        error_code="API_ERROR",
+        details={
+            "symbol": symbol,
+            "dates_requested": dates_to_fetch,
+            "failed_dates": failed_dates,
+            "exception": str(representative_exception),
+        },
+    )
 
 
 @mcp.tool(
@@ -771,11 +851,7 @@ async def _fetch_option_chain_for_date(
     option_type: OptionChainType,
 ) -> dict[str, Any]:
     """Fetch option chain for a single expiration date."""
-    try:
-        opt = await asyncio.to_thread(lambda d=date: ticker.option_chain(d))
-    except Exception as exc:
-        logger.warning("Failed to fetch option chain for {} {}: {}", ticker, date, exc)
-        return {}
+    opt = await asyncio.to_thread(lambda d=date: ticker.option_chain(d))
 
     calls_df = opt.calls
     puts_df = opt.puts
@@ -856,10 +932,10 @@ async def get_option_chain(
     try:
         available_dates = await asyncio.to_thread(lambda: ticker.options)
     except Exception as exc:
-        return create_error_response(
+        return _create_option_dates_fetch_error(
+            symbol,
+            exc,
             f"Failed to fetch option dates for '{symbol}'. The symbol may not have options.",
-            error_code="API_ERROR",
-            details={"symbol": symbol, "exception": str(exc)},
         )
 
     if not available_dates:
@@ -881,21 +957,30 @@ async def get_option_chain(
             },
         )
 
-    dates_to_fetch = [expiration_date] if expiration_date else available_dates
+    dates_to_fetch = [expiration_date] if expiration_date else list(available_dates)
     result: dict[str, Any] = {}
+    fetch_errors: list[tuple[str, Exception]] = []
 
     for date in dates_to_fetch:
-        date_result = await _fetch_option_chain_for_date(ticker, date, option_type)
+        try:
+            date_result = await _fetch_option_chain_for_date(ticker, date, option_type)
+        except Exception as exc:
+            logger.warning("Failed to fetch option chain for {} {}: {}", symbol, date, exc)
+            fetch_errors.append((date, exc))
+            continue
         result.update(date_result)
 
-    if not result:
-        return create_error_response(
-            f"No option data retrieved for '{symbol}'.",
-            error_code="NO_DATA",
-            details={"symbol": symbol, "dates_requested": list(dates_to_fetch)},
-        )
+    if result:
+        return dump_json(result)
 
-    return dump_json(result)
+    if fetch_errors:
+        return _create_option_chain_fetch_error(symbol, dates_to_fetch, fetch_errors)
+
+    return create_error_response(
+        f"No option data retrieved for '{symbol}'.",
+        error_code="NO_DATA",
+        details={"symbol": symbol, "dates_requested": list(dates_to_fetch)},
+    )
 
 
 @mcp.tool(
@@ -920,17 +1005,11 @@ async def get_option_dates(
     try:
         ticker = await asyncio.to_thread(yf.Ticker, symbol)
         dates = await asyncio.to_thread(lambda: ticker.options)
-    except (ConnectionError, TimeoutError, OSError) as exc:
-        return create_error_response(
-            f"Network error while fetching option dates for '{symbol}'. Check your internet connection and try again.",
-            error_code="NETWORK_ERROR",
-            details={"symbol": symbol, "exception": str(exc)},
-        )
     except Exception as exc:
-        return create_error_response(
+        return _create_option_dates_fetch_error(
+            symbol,
+            exc,
             f"Failed to fetch option dates for '{symbol}'. Verify the symbol is correct.",
-            error_code="API_ERROR",
-            details={"symbol": symbol, "exception": str(exc)},
         )
 
     if not dates:

@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pandas as pd
 import pytest
+from yfinance.exceptions import YFRateLimitError
 
 from yfmcp.server import _build_financials_response
 from yfmcp.server import get_financials
@@ -519,6 +520,26 @@ async def test_get_option_dates_no_options(mock_to_thread: AsyncMock, mock_ticke
     assert data["error_code"] == "NO_DATA"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exception", [TimeoutError("timed out"), YFRateLimitError()])
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_dates_options_network_error(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock, exception: Exception
+) -> None:
+    """Test network errors while reading ticker.options in get_option_dates."""
+    mock_ticker_obj = MagicMock()
+    type(mock_ticker_obj).options = PropertyMock(side_effect=exception)
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_option_dates("AAPL")
+    data = json.loads(result)
+
+    assert data["error_code"] == "NETWORK_ERROR"
+    assert "Network error while fetching option dates" in data["error"]
+
+
 def _option_df() -> pd.DataFrame:
     """Build a yfinance-shaped option DataFrame."""
     return pd.DataFrame(
@@ -746,8 +767,8 @@ async def test_get_option_chain_ticker_network_error(
 @pytest.mark.asyncio
 @patch("yfmcp.server.yf.Ticker")
 @patch("yfmcp.server.asyncio.to_thread")
-async def test_get_option_chain_dates_fetch_error(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
-    """Test error during available_dates fetch in get_option_chain."""
+async def test_get_option_chain_dates_fetch_api_error(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test API error during available_dates fetch in get_option_chain."""
     mock_ticker_obj = MagicMock()
     # Mocking a property that raises Exception
     type(mock_ticker_obj).options = PropertyMock(side_effect=Exception("dates failed"))
@@ -760,6 +781,27 @@ async def test_get_option_chain_dates_fetch_error(mock_to_thread: AsyncMock, moc
 
     assert data["error_code"] == "API_ERROR"
     assert "Failed to fetch option dates" in data["error"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exception", [TimeoutError("timed out"), YFRateLimitError()])
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_chain_dates_fetch_network_error(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock, exception: Exception
+) -> None:
+    """Test network error during available_dates fetch in get_option_chain."""
+    mock_ticker_obj = MagicMock()
+    type(mock_ticker_obj).options = PropertyMock(side_effect=exception)
+
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_option_chain("AAPL")
+    data = json.loads(result)
+
+    assert data["error_code"] == "NETWORK_ERROR"
+    assert "Network error while fetching option dates" in data["error"]
 
 
 @pytest.mark.asyncio
@@ -800,3 +842,45 @@ async def test_get_option_chain_partial_failure(mock_to_thread: AsyncMock, mock_
     # Should have data for the second date but not the first
     assert "2025-05-09" in data
     assert "2025-05-02" not in data
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exception", [TimeoutError("timed out"), YFRateLimitError()])
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_chain_specific_date_fetch_network_error(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock, exception: Exception
+) -> None:
+    """Test a single-date option chain fetch failure remains retryable."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.options = ["2025-05-02"]
+    mock_ticker_obj.option_chain.side_effect = exception
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_option_chain("AAPL", expiration_date="2025-05-02")
+    data = json.loads(result)
+
+    assert data["error_code"] == "NETWORK_ERROR"
+    assert data["details"]["expiration_date"] == "2025-05-02"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exception", [TimeoutError("timed out"), YFRateLimitError()])
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_option_chain_all_dates_fetch_network_error(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock, exception: Exception
+) -> None:
+    """Test all-date option chain fetch failures remain retryable."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.options = ["2025-05-02", "2025-05-09"]
+    mock_ticker_obj.option_chain.side_effect = exception
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_option_chain("AAPL")
+    data = json.loads(result)
+
+    assert data["error_code"] == "NETWORK_ERROR"
+    assert data["details"]["failed_dates"] == ["2025-05-02", "2025-05-09"]
