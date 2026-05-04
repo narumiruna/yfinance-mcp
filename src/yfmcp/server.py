@@ -1007,7 +1007,7 @@ async def _fetch_holder_section(
     result: dict[str, Any],
     fetch_errors: list[Exception],
 ) -> None:
-    """Fetch a single holder data section from the ticker, mutating result on success."""
+    """Fetch a single holder data section, adding successful data to result and failures to fetch_errors."""
     try:
         df = await asyncio.to_thread(lambda t=ticker: getattr(t, attr_name))
     except Exception as exc:
