@@ -1005,12 +1005,14 @@ async def _fetch_holder_section(
     attr_name: str,
     result_key: str,
     result: dict[str, Any],
+    fetch_errors: list[Exception],
 ) -> None:
     """Fetch a single holder data section from the ticker, mutating result on success."""
     try:
         df = await asyncio.to_thread(lambda t=ticker: getattr(t, attr_name))
     except Exception as exc:
         logger.warning("Failed to fetch {} for {}: {}", attr_name, symbol, exc)
+        fetch_errors.append(exc)
         return
     if df is not None and not df.empty:
         if attr_name == "major_holders":
@@ -1057,14 +1059,23 @@ async def get_holders(
         )
 
     result: dict[str, Any] = {}
-    await _fetch_holder_section(symbol, ticker, "major_holders", "major_holders", result)
-    await _fetch_holder_section(symbol, ticker, "institutional_holders", "institutional_holders", result)
-    await _fetch_holder_section(symbol, ticker, "mutualfund_holders", "mutualfund_holders", result)
-    await _fetch_holder_section(symbol, ticker, "insider_transactions", "insider_transactions", result)
-    await _fetch_holder_section(symbol, ticker, "insider_purchases", "insider_purchases", result)
-    await _fetch_holder_section(symbol, ticker, "insider_roster_holders", "insider_roster", result)
+    fetch_errors: list[Exception] = []
+    await _fetch_holder_section(symbol, ticker, "major_holders", "major_holders", result, fetch_errors)
+    await _fetch_holder_section(symbol, ticker, "institutional_holders", "institutional_holders", result, fetch_errors)
+    await _fetch_holder_section(symbol, ticker, "mutualfund_holders", "mutualfund_holders", result, fetch_errors)
+    await _fetch_holder_section(symbol, ticker, "insider_transactions", "insider_transactions", result, fetch_errors)
+    await _fetch_holder_section(symbol, ticker, "insider_purchases", "insider_purchases", result, fetch_errors)
+    await _fetch_holder_section(symbol, ticker, "insider_roster_holders", "insider_roster", result, fetch_errors)
 
     if not result:
+        retryable_exceptions = [exc for exc in fetch_errors if _is_retryable_yfinance_error(exc)]
+        if retryable_exceptions:
+            return _create_retryable_error_response(
+                f"fetching holders for '{symbol}'",
+                _select_retryable_exception(retryable_exceptions),
+                {"symbol": symbol},
+            )
+
         return create_error_response(
             f"No holder data available for '{symbol}'. Verify the symbol is correct.",
             error_code="NO_DATA",
