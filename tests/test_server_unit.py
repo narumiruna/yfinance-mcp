@@ -953,6 +953,18 @@ def _insider_transactions_df() -> pd.DataFrame:
     )
 
 
+def _many_insider_transactions_df(row_count: int) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Shares": list(range(row_count)),
+            "Value": [share * 100 for share in range(row_count)],
+            "Start Date": ["2025-12-01"] * row_count,
+            "Transaction": ["Sale"] * row_count,
+            "Insider": [f"Insider {index}" for index in range(row_count)],
+        }
+    )
+
+
 def _insider_purchases_df() -> pd.DataFrame:
     return pd.DataFrame(
         {
@@ -995,6 +1007,7 @@ async def test_get_holders_success_all_sections(mock_to_thread: AsyncMock, mock_
     assert "insider_transactions" in data
     assert "insider_purchases" in data
     assert "insider_roster" in data
+    assert "_metadata" in data
 
     assert data["major_holders"][0] == {"index": "insidersPercentHeld", "Value": 0.0015}
     assert data["major_holders"][1] == {"index": "institutionsPercentHeld", "Value": 0.65}
@@ -1005,6 +1018,78 @@ async def test_get_holders_success_all_sections(mock_to_thread: AsyncMock, mock_
 
     # Spot check insider roster
     assert data["insider_roster"][0]["Name"] == "COOK TIMOTHY D"
+
+    assert data["_metadata"]["max_rows"] == 10
+    assert data["_metadata"]["sections"]["insider_transactions"] == {
+        "total_rows": 2,
+        "returned_rows": 2,
+        "truncated": False,
+    }
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_holders_limits_rows_by_default(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test holder sections are truncated to the default max_rows."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.major_holders = _major_holders_df()
+    mock_ticker_obj.institutional_holders = _institutional_holders_df()
+    mock_ticker_obj.mutualfund_holders = _mutualfund_holders_df()
+    mock_ticker_obj.insider_transactions = _many_insider_transactions_df(12)
+    mock_ticker_obj.insider_purchases = _insider_purchases_df()
+    mock_ticker_obj.insider_roster_holders = _insider_roster_df()
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_holders("AAPL")
+    data = json.loads(result)
+
+    assert len(data["insider_transactions"]) == 10
+    assert data["insider_transactions"][0]["Insider"] == "Insider 0"
+    assert data["insider_transactions"][-1]["Insider"] == "Insider 9"
+    assert data["_metadata"]["sections"]["insider_transactions"] == {
+        "total_rows": 12,
+        "returned_rows": 10,
+        "truncated": True,
+    }
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_holders_max_rows_zero_returns_all_rows(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test max_rows=0 disables row limits."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.major_holders = _major_holders_df()
+    mock_ticker_obj.institutional_holders = _institutional_holders_df()
+    mock_ticker_obj.mutualfund_holders = _mutualfund_holders_df()
+    mock_ticker_obj.insider_transactions = _many_insider_transactions_df(12)
+    mock_ticker_obj.insider_purchases = _insider_purchases_df()
+    mock_ticker_obj.insider_roster_holders = _insider_roster_df()
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_holders("AAPL", max_rows=0)
+    data = json.loads(result)
+
+    assert len(data["insider_transactions"]) == 12
+    assert data["_metadata"]["max_rows"] == 0
+    assert data["_metadata"]["sections"]["insider_transactions"] == {
+        "total_rows": 12,
+        "returned_rows": 12,
+        "truncated": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_holders_rejects_negative_max_rows() -> None:
+    """Test max_rows must be non-negative."""
+    result = await get_holders("AAPL", max_rows=-1)
+    data = json.loads(result)
+
+    assert data["error_code"] == "INVALID_PARAMS"
+    assert data["details"]["max_rows"] == -1
 
 
 @pytest.mark.asyncio

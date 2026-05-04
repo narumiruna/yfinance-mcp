@@ -1005,7 +1005,9 @@ async def _fetch_holder_section(
     attr_name: str,
     result_key: str,
     result: dict[str, Any],
+    section_metadata: dict[str, dict[str, int | bool]],
     fetch_errors: list[Exception],
+    max_rows: int,
 ) -> None:
     """Fetch a single holder data section, adding successful data to result and failures to fetch_errors."""
     try:
@@ -1017,7 +1019,16 @@ async def _fetch_holder_section(
     if df is not None and not df.empty:
         if attr_name == "major_holders":
             df = df.reset_index()
-        result[result_key] = df.to_dict(orient="records")
+
+        total_rows = len(df)
+        limited_df = df if max_rows == 0 else df.head(max_rows)
+        limited_records = limited_df.to_dict(orient="records")
+        result[result_key] = limited_records
+        section_metadata[result_key] = {
+            "total_rows": total_rows,
+            "returned_rows": len(limited_records),
+            "truncated": len(limited_records) < total_rows,
+        }
 
 
 @mcp.tool(
@@ -1031,6 +1042,10 @@ async def _fetch_holder_section(
 )
 async def get_holders(
     symbol: Annotated[str, Field(description="Stock ticker symbol (e.g., 'AAPL', 'GOOGL', 'MSFT')")],
+    max_rows: Annotated[
+        int,
+        Field(description="Maximum rows returned per holder section. Use 0 to return all rows."),
+    ] = 10,
 ) -> str:
     """Fetch major holders, institutional holders, mutual fund holders, and insider data.
 
@@ -1047,6 +1062,13 @@ async def get_holders(
 
     Use this to analyze ownership concentration, insider activity, and institutional interest.
     """
+    if max_rows < 0:
+        return create_error_response(
+            "max_rows must be greater than or equal to 0.",
+            error_code="INVALID_PARAMS",
+            details={"max_rows": max_rows},
+        )
+
     try:
         ticker = await asyncio.to_thread(yf.Ticker, symbol)
     except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
@@ -1059,13 +1081,54 @@ async def get_holders(
         )
 
     result: dict[str, Any] = {}
+    section_metadata: dict[str, dict[str, int | bool]] = {}
     fetch_errors: list[Exception] = []
-    await _fetch_holder_section(symbol, ticker, "major_holders", "major_holders", result, fetch_errors)
-    await _fetch_holder_section(symbol, ticker, "institutional_holders", "institutional_holders", result, fetch_errors)
-    await _fetch_holder_section(symbol, ticker, "mutualfund_holders", "mutualfund_holders", result, fetch_errors)
-    await _fetch_holder_section(symbol, ticker, "insider_transactions", "insider_transactions", result, fetch_errors)
-    await _fetch_holder_section(symbol, ticker, "insider_purchases", "insider_purchases", result, fetch_errors)
-    await _fetch_holder_section(symbol, ticker, "insider_roster_holders", "insider_roster", result, fetch_errors)
+    await _fetch_holder_section(
+        symbol, ticker, "major_holders", "major_holders", result, section_metadata, fetch_errors, max_rows
+    )
+    await _fetch_holder_section(
+        symbol,
+        ticker,
+        "institutional_holders",
+        "institutional_holders",
+        result,
+        section_metadata,
+        fetch_errors,
+        max_rows,
+    )
+    await _fetch_holder_section(
+        symbol,
+        ticker,
+        "mutualfund_holders",
+        "mutualfund_holders",
+        result,
+        section_metadata,
+        fetch_errors,
+        max_rows,
+    )
+    await _fetch_holder_section(
+        symbol,
+        ticker,
+        "insider_transactions",
+        "insider_transactions",
+        result,
+        section_metadata,
+        fetch_errors,
+        max_rows,
+    )
+    await _fetch_holder_section(
+        symbol, ticker, "insider_purchases", "insider_purchases", result, section_metadata, fetch_errors, max_rows
+    )
+    await _fetch_holder_section(
+        symbol,
+        ticker,
+        "insider_roster_holders",
+        "insider_roster",
+        result,
+        section_metadata,
+        fetch_errors,
+        max_rows,
+    )
 
     if not result:
         retryable_exceptions = [exc for exc in fetch_errors if _is_retryable_yfinance_error(exc)]
@@ -1082,6 +1145,7 @@ async def get_holders(
             details={"symbol": symbol},
         )
 
+    result["_metadata"] = {"max_rows": max_rows, "sections": section_metadata}
     return dump_json(result)
 
 

@@ -117,6 +117,7 @@ Fetch major holders, institutional holders, mutual fund holders, and insider dat
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `symbol` | string | Yes | Stock ticker symbol (e.g. `AAPL`, `MSFT`) |
+| `max_rows` | number | No | Maximum rows returned per holder section. Default: `10`. Use `0` to return all rows |
 
 **Returns:** JSON object with:
 - **`major_holders`** — Aggregated breakdown where each row has an `index` label (e.g. `insidersPercentHeld`, `institutionsPercentHeld`, `institutionsFloatPercentHeld`, `institutionsCount`) and a `Value`
@@ -125,8 +126,9 @@ Fetch major holders, institutional holders, mutual fund holders, and insider dat
 - **`insider_transactions`** — Recent insider trades; records typically include fields such as `Shares`, `Value`, `Insider`, `Position`, `Transaction`, `Start Date`, `Ownership`
 - **`insider_purchases`** — Six-month summary where each row describes a category (Purchases, Sales, Net Shares, etc.); records typically include fields such as `Insider Purchases Last 6m`, `Shares`, `Trans`
 - **`insider_roster`** — Known insiders; records typically include fields such as `Name`, `Position`, `Shares Owned Directly`, `Most Recent Transaction`, `Latest Transaction Date`
+- **`_metadata`** — Row limit metadata with `max_rows` and per-section `total_rows`, `returned_rows`, and `truncated`
 
-Field names for holder-related datasets are provided by `yfinance` and may vary by ticker, data availability, and `yfinance` version.
+Holder sections are limited to 10 rows by default to keep responses concise. Pass `max_rows: 0` when you need the complete holder datasets. Field names for holder-related datasets are provided by `yfinance` and may vary by ticker, data availability, and `yfinance` version.
 
 ### `yfinance_get_option_dates`
 
