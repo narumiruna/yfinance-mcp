@@ -12,6 +12,7 @@ from yfinance.exceptions import YFRateLimitError
 
 from yfmcp.server import _build_financials_response
 from yfmcp.server import get_financials
+from yfmcp.server import get_holders
 from yfmcp.server import get_option_chain
 from yfmcp.server import get_option_dates
 from yfmcp.server import get_price_history
@@ -907,3 +908,197 @@ async def test_get_option_chain_all_dates_fetch_network_error(
     assert data["error_code"] == "NETWORK_ERROR"
     assert data["error"] == _expected_retryable_error("fetching option chain for 'AAPL'", exception)
     assert data["details"]["failed_dates"] == ["2025-05-02", "2025-05-09"]
+
+
+def _major_holders_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        {"Value": [0.0015, 0.65, 0.66, 7540.0]},
+        index=["insidersPercentHeld", "institutionsPercentHeld", "institutionsFloatPercentHeld", "institutionsCount"],
+    )
+
+
+def _institutional_holders_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Date Reported": ["2025-12-31", "2025-12-31"],
+            "Holder": ["Vanguard Group Inc", "Blackrock Inc."],
+            "Shares": [100_000_000, 80_000_000],
+            "Value": [20_000_000_000, 16_000_000_000],
+            "pctChange": [0.019, 0.007],
+        }
+    )
+
+
+def _mutualfund_holders_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Date Reported": ["2025-12-31"],
+            "Holder": ["Fidelity 500 Index"],
+            "Shares": [10_000_000],
+            "Value": [2_000_000_000],
+            "pctChange": [-0.01],
+        }
+    )
+
+
+def _insider_transactions_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Shares": [10_000, 5_000],
+            "Value": [2_000_000, 1_000_000],
+            "Start Date": ["2025-12-01", "2025-11-15"],
+            "Transaction": ["Sale", "Purchase"],
+            "Insider": ["COOK TIMOTHY D", "ADAMS KATHERINE L"],
+        }
+    )
+
+
+def _insider_purchases_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Insider Purchases Last 6m": ["Purchases", "Sales", "Net Shares Purchased (Sold)"],
+            "Shares": [50_000.0, 15_000.0, 35_000.0],
+        }
+    )
+
+
+def _insider_roster_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Name": ["COOK TIMOTHY D", "KHAN SABIH"],
+            "Position": ["Chief Executive Officer", "SVP, General Counsel"],
+        }
+    )
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_holders_success_all_sections(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test successful holders retrieval with all data sections."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.major_holders = _major_holders_df()
+    mock_ticker_obj.institutional_holders = _institutional_holders_df()
+    mock_ticker_obj.mutualfund_holders = _mutualfund_holders_df()
+    mock_ticker_obj.insider_transactions = _insider_transactions_df()
+    mock_ticker_obj.insider_purchases = _insider_purchases_df()
+    mock_ticker_obj.insider_roster_holders = _insider_roster_df()
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_holders("AAPL")
+    data = json.loads(result)
+
+    assert "major_holders" in data
+    assert "institutional_holders" in data
+    assert "mutualfund_holders" in data
+    assert "insider_transactions" in data
+    assert "insider_purchases" in data
+    assert "insider_roster" in data
+
+    assert data["major_holders"][0] == {"index": "insidersPercentHeld", "Value": 0.0015}
+    assert data["major_holders"][1] == {"index": "institutionsPercentHeld", "Value": 0.65}
+
+    # Spot check institutional holder
+    assert data["institutional_holders"][0]["Holder"] == "Vanguard Group Inc"
+    assert data["institutional_holders"][0]["Shares"] == 100_000_000
+
+    # Spot check insider roster
+    assert data["insider_roster"][0]["Name"] == "COOK TIMOTHY D"
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_holders_partial_data(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test holders retrieval where some sections are empty DataFrames."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.major_holders = _major_holders_df()
+    mock_ticker_obj.institutional_holders = pd.DataFrame()
+    mock_ticker_obj.mutualfund_holders = None
+    mock_ticker_obj.insider_transactions = _insider_transactions_df()
+    mock_ticker_obj.insider_purchases = pd.DataFrame()
+    mock_ticker_obj.insider_roster_holders = None
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_holders("AAPL")
+    data = json.loads(result)
+
+    assert "major_holders" in data
+    assert "insider_transactions" in data
+    assert "institutional_holders" not in data
+    assert "mutualfund_holders" not in data
+    assert "insider_purchases" not in data
+    assert "insider_roster" not in data
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_holders_no_data(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test holders retrieval with no data at all."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.major_holders = None
+    mock_ticker_obj.institutional_holders = pd.DataFrame()
+    mock_ticker_obj.mutualfund_holders = None
+    mock_ticker_obj.insider_transactions = pd.DataFrame()
+    mock_ticker_obj.insider_purchases = None
+    mock_ticker_obj.insider_roster_holders = None
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_holders("EMPTY")
+    data = json.loads(result)
+
+    assert data["error_code"] == "NO_DATA"
+    assert data["details"]["symbol"] == "EMPTY"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exception", [TimeoutError("timed out"), OSError("network unreachable"), YFRateLimitError()])
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_holders_ticker_network_error(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock, exception: Exception
+) -> None:
+    """Test network errors during ticker creation return structured network errors."""
+    mock_ticker.side_effect = exception
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_holders("AAPL")
+    data = json.loads(result)
+
+    assert data["error_code"] == "NETWORK_ERROR"
+    assert data["error"] == _expected_retryable_error("fetching holders for 'AAPL'", exception)
+    assert data["details"]["symbol"] == "AAPL"
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_holders_partial_failure(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test that partial failures in some sections still return available data."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.major_holders = _major_holders_df()
+    mock_ticker_obj.institutional_holders = _institutional_holders_df()
+    # Raise error when accessing mutualfund_holders
+    type(mock_ticker_obj).mutualfund_holders = PropertyMock(side_effect=RuntimeError("fetch failed"))
+    # Raise error when accessing insider_transactions
+    type(mock_ticker_obj).insider_transactions = PropertyMock(side_effect=RuntimeError("fetch failed"))
+    mock_ticker_obj.insider_purchases = _insider_purchases_df()
+    mock_ticker_obj.insider_roster_holders = _insider_roster_df()
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_holders("AAPL")
+    data = json.loads(result)
+
+    # Should still return the sections that succeeded
+    assert "major_holders" in data
+    assert "institutional_holders" in data
+    assert "insider_purchases" in data
+    assert "insider_roster" in data
+    # Failed sections should be absent
+    assert "mutualfund_holders" not in data
+    assert "insider_transactions" not in data
