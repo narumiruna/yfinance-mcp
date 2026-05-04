@@ -1020,13 +1020,14 @@ async def _fetch_holder_section(
         if attr_name == "major_holders":
             df = df.reset_index()
 
-        records = df.to_dict(orient="records")
-        limited_records = records if max_rows == 0 else records[:max_rows]
+        total_rows = len(df)
+        limited_df = df if max_rows == 0 else df.head(max_rows)
+        limited_records = limited_df.to_dict(orient="records")
         result[result_key] = limited_records
         section_metadata[result_key] = {
-            "total_rows": len(records),
+            "total_rows": total_rows,
             "returned_rows": len(limited_records),
-            "truncated": len(limited_records) < len(records),
+            "truncated": len(limited_records) < total_rows,
         }
 
 
