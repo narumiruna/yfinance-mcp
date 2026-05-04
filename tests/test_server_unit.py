@@ -1102,3 +1102,48 @@ async def test_get_holders_partial_failure(mock_to_thread: AsyncMock, mock_ticke
     # Failed sections should be absent
     assert "mutualfund_holders" not in data
     assert "insider_transactions" not in data
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exception", [TimeoutError("timed out"), YFRateLimitError()])
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_holders_all_sections_retryable_failure(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock, exception: Exception
+) -> None:
+    """Test retryable section failures return a structured network error when no section succeeds."""
+
+    class _RetryableHolderSectionErrorTicker:
+        @property
+        def major_holders(self):
+            raise exception
+
+        @property
+        def institutional_holders(self):
+            raise exception
+
+        @property
+        def mutualfund_holders(self):
+            raise exception
+
+        @property
+        def insider_transactions(self):
+            raise exception
+
+        @property
+        def insider_purchases(self):
+            raise exception
+
+        @property
+        def insider_roster_holders(self):
+            raise exception
+
+    mock_ticker.return_value = _RetryableHolderSectionErrorTicker()
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_holders("AAPL")
+    data = json.loads(result)
+
+    assert data["error_code"] == "NETWORK_ERROR"
+    assert data["error"] == _expected_retryable_error("fetching holders for 'AAPL'", exception)
+    assert data["details"]["symbol"] == "AAPL"
