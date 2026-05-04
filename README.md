@@ -120,11 +120,13 @@ Fetch major holders, institutional holders, mutual fund holders, and insider dat
 
 **Returns:** JSON object with:
 - **`major_holders`** — Aggregated breakdown where each row has an `index` label (e.g. `insidersPercentHeld`, `institutionsPercentHeld`, `institutionsFloatPercentHeld`, `institutionsCount`) and a `Value`
-- **`institutional_holders`** — Institutional investors with fields: `Date Reported`, `Holder`, `Shares`, `Value`, `pctChange`, `pctHeld`
-- **`mutualfund_holders`** — Mutual fund holders with same fields as institutional holders
-- **`insider_transactions`** — Recent insider trades with fields: `Shares`, `Value`, `Insider`, `Position`, `Transaction`, `Start Date`, `Ownership`
-- **`insider_purchases`** — Six-month summary where each row describes a category (Purchases, Sales, Net Shares, etc.) with fields: `Insider Purchases Last 6m`, `Shares`, `Trans`
-- **`insider_roster`** — Known insiders with fields: `Name`, `Position`, `Shares Owned Directly`, `Most Recent Transaction`, `Latest Transaction Date`
+- **`institutional_holders`** — Institutional investors; records typically include fields such as `Date Reported`, `Holder`, `Shares`, `Value`, `pctChange`, `pctHeld`
+- **`mutualfund_holders`** — Mutual fund holders; records typically include fields similar to institutional holders
+- **`insider_transactions`** — Recent insider trades; records typically include fields such as `Shares`, `Value`, `Insider`, `Position`, `Transaction`, `Start Date`, `Ownership`
+- **`insider_purchases`** — Six-month summary where each row describes a category (Purchases, Sales, Net Shares, etc.); records typically include fields such as `Insider Purchases Last 6m`, `Shares`, `Trans`
+- **`insider_roster`** — Known insiders; records typically include fields such as `Name`, `Position`, `Shares Owned Directly`, `Most Recent Transaction`, `Latest Transaction Date`
+
+Field names for holder-related datasets are provided by `yfinance` and may vary by ticker, data availability, and `yfinance` version.
 
 ### `yfinance_get_option_dates`
 
