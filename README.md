@@ -21,6 +21,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 - **Price History** — Historical OHLCV data as markdown tables or professional charts
 - **Chart Generation** — Candlestick, VWAP, and volume profile charts returned as WebP images
 - **Options Data** — Option chains with calls, puts, strike prices, IV, and expiration dates
+- **Ownership Data** — Major holders, institutional investors, mutual fund holders, and insider transactions
 
 ## Tools
 
@@ -108,6 +109,24 @@ Fetch financial statements (income statement, balance sheet, and cash flow) with
 - **Income Statement fields**: EBIT, Net Income, Tax Provision, Pretax Income, Interest Expense, Total Revenue, Operating Income, EBITDA, Normalized Income
 - **Balance Sheet fields**: Stockholders Equity, Total Debt, Cash And Cash Equivalents, Invested Capital, Net Debt, Total Assets, Total Liabilities Net Minority Interest, Net Tangible Assets, Tangible Book Value
 - **Cash Flow fields**: Operating Cash Flow, Free Cash Flow, Capital Expenditure, Net Income From Continuing Operations, Depreciation And Amortization, Change In Working Capital, Cash Dividends Paid
+
+### `yfinance_get_holders`
+
+Fetch major holders, institutional holders, mutual fund holders, and insider data.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `symbol` | string | Yes | Stock ticker symbol (e.g. `AAPL`, `MSFT`) |
+
+**Returns:** JSON object with:
+- **`major_holders`** — Aggregated breakdown where each row has an `index` label (e.g. `insidersPercentHeld`, `institutionsPercentHeld`, `institutionsFloatPercentHeld`, `institutionsCount`) and a `Value`
+- **`institutional_holders`** — Institutional investors; records typically include fields such as `Date Reported`, `Holder`, `Shares`, `Value`, `pctChange`, `pctHeld`
+- **`mutualfund_holders`** — Mutual fund holders; records typically include fields similar to institutional holders
+- **`insider_transactions`** — Recent insider trades; records typically include fields such as `Shares`, `Value`, `Insider`, `Position`, `Transaction`, `Start Date`, `Ownership`
+- **`insider_purchases`** — Six-month summary where each row describes a category (Purchases, Sales, Net Shares, etc.); records typically include fields such as `Insider Purchases Last 6m`, `Shares`, `Trans`
+- **`insider_roster`** — Known insiders; records typically include fields such as `Name`, `Position`, `Shares Owned Directly`, `Most Recent Transaction`, `Latest Transaction Date`
+
+Field names for holder-related datasets are provided by `yfinance` and may vary by ticker, data availability, and `yfinance` version.
 
 ### `yfinance_get_option_dates`
 

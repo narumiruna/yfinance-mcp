@@ -999,5 +999,80 @@ async def get_option_dates(
     return dump_json(dates)
 
 
+async def _fetch_holder_section(
+    symbol: str,
+    ticker: yf.Ticker,
+    attr_name: str,
+    result_key: str,
+    result: dict[str, Any],
+) -> None:
+    """Fetch a single holder data section from the ticker, mutating result on success."""
+    try:
+        df = await asyncio.to_thread(lambda t=ticker: getattr(t, attr_name))
+    except Exception as exc:
+        logger.warning("Failed to fetch {} for {}: {}", attr_name, symbol, exc)
+        return
+    if df is not None and not df.empty:
+        if attr_name == "major_holders":
+            df = df.reset_index()
+        result[result_key] = df.to_dict(orient="records")
+
+
+@mcp.tool(
+    name="yfinance_get_holders",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
+async def get_holders(
+    symbol: Annotated[str, Field(description="Stock ticker symbol (e.g., 'AAPL', 'GOOGL', 'MSFT')")],
+) -> str:
+    """Fetch major holders, institutional holders, mutual fund holders, and insider data.
+
+    Returns JSON with:
+    - major_holders: Aggregated breakdown including insider % held, institutional % held,
+      institutional % float held, and institution count.
+    - institutional_holders: List of institutional investors with shares held, date reported,
+      value, and % change.
+    - mutualfund_holders: List of mutual fund holders with same fields.
+    - insider_transactions: Recent insider transactions including shares, value, transaction
+      type, and date.
+    - insider_purchases: Summary of insider buy/sell activity over the last 6 months.
+    - insider_roster: List of known insiders by name and position.
+
+    Use this to analyze ownership concentration, insider activity, and institutional interest.
+    """
+    try:
+        ticker = await asyncio.to_thread(yf.Ticker, symbol)
+    except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
+        return _create_retryable_error_response(f"fetching holders for '{symbol}'", exc, {"symbol": symbol})
+    except Exception as exc:
+        return create_error_response(
+            f"Failed to fetch holders for '{symbol}'. Verify the symbol is correct.",
+            error_code="API_ERROR",
+            details={"symbol": symbol, "exception": str(exc)},
+        )
+
+    result: dict[str, Any] = {}
+    await _fetch_holder_section(symbol, ticker, "major_holders", "major_holders", result)
+    await _fetch_holder_section(symbol, ticker, "institutional_holders", "institutional_holders", result)
+    await _fetch_holder_section(symbol, ticker, "mutualfund_holders", "mutualfund_holders", result)
+    await _fetch_holder_section(symbol, ticker, "insider_transactions", "insider_transactions", result)
+    await _fetch_holder_section(symbol, ticker, "insider_purchases", "insider_purchases", result)
+    await _fetch_holder_section(symbol, ticker, "insider_roster_holders", "insider_roster", result)
+
+    if not result:
+        return create_error_response(
+            f"No holder data available for '{symbol}'. Verify the symbol is correct.",
+            error_code="NO_DATA",
+            details={"symbol": symbol},
+        )
+
+    return dump_json(result)
+
+
 def main() -> None:
     mcp.run()
