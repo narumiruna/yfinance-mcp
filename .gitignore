@@ -134,8 +134,5 @@ dmypy.json
 # VS Code
 .vscode/
 
-# Codex CLI
-.codex
-
 # Claude code
 .claude/
