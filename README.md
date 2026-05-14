@@ -223,6 +223,17 @@ uv sync
 
 Replace `/path/to/yfinance-mcp` with the actual path to your cloned repository.
 
+### Testing with Codex CLI
+
+This repository includes `.codex/config.toml`, which registers the local `yfmcp` MCP server for Codex CLI using `uv run yfmcp`. After cloning the repository and running `uv sync`, open Codex CLI from the repository root and try prompts such as:
+
+```text
+Show VOO ticker info
+Show VOO price history for the last 5 days
+Find the ticker symbol for Toyota
+Get AAPL option expiration dates
+```
+
 ## Development
 
 ### Prerequisites
