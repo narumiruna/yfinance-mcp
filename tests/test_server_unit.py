@@ -264,6 +264,72 @@ async def test_get_price_history_returns_markdown_table_when_chart_type_is_none(
     assert "Open" in result
     assert "Close" in result
     assert "|" in result
+    mock_ticker_obj.history.assert_called_once_with(period="1mo", interval="1d", prepost=False, rounding=True)
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_price_history_passes_prepost_to_yfinance(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test price history can request pre-market and post-market rows."""
+    df = pd.DataFrame(
+        {
+            "Open": [100.0],
+            "High": [110.0],
+            "Low": [95.0],
+            "Close": [105.0],
+            "Volume": [1_000_000],
+        },
+        index=[pd.Timestamp("2024-01-02")],
+    )
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.history.return_value = df
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_price_history("AAPL", "1d", "1m", None, True)
+
+    assert isinstance(result, str)
+    mock_ticker_obj.history.assert_called_once_with(period="1d", interval="1m", prepost=True, rounding=True)
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_price_history_no_data_includes_prepost_detail(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock
+) -> None:
+    """Test no-data errors include the prepost request value."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.history.return_value = pd.DataFrame()
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_price_history("AAPL", "1d", "1m", None, True)
+    data = json.loads(result)
+
+    assert data["error_code"] == "NO_DATA"
+    assert data["details"] == {"symbol": "AAPL", "period": "1d", "interval": "1m", "prepost": True}
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_price_history_api_error_includes_prepost_detail(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock
+) -> None:
+    """Test API errors include the prepost request value."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.history.side_effect = RuntimeError("history failed")
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_price_history("AAPL", "1d", "1m", None, True)
+    data = json.loads(result)
+
+    assert data["error_code"] == "API_ERROR"
+    assert data["details"]["prepost"] is True
+    assert data["details"]["exception"] == "history failed"
 
 
 @pytest.mark.asyncio

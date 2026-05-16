@@ -82,6 +82,7 @@ Fetch historical price data and optionally generate technical analysis charts.
 | `period` | string | No | Time range — `1d`, `5d`, `1mo`, `3mo`, `6mo`, `1y`, `2y`, `5y`, `10y`, `ytd`, `max` (default: `1mo`) |
 | `interval` | string | No | Data granularity — `1m`, `2m`, `5m`, `15m`, `30m`, `60m`, `90m`, `1h`, `1d`, `5d`, `1wk`, `1mo`, `3mo` (default: `1d`) |
 | `chart_type` | string | No | Chart to generate (omit for tabular data) |
+| `prepost` | boolean | No | Include pre-market and post-market data when available (default: `false`; useful with intraday requests like `period="1d"`, `interval="1m"`) |
 
 **Chart types:**
 

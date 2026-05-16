@@ -615,6 +615,10 @@ async def get_price_history(
             )
         ),
     ] = None,
+    prepost: Annotated[
+        bool,
+        Field(description="Include pre-market and post-market data when available"),
+    ] = False,
 ) -> str | ImageContent:
     """Fetch historical price data and optionally generate technical analysis charts.
 
@@ -633,6 +637,8 @@ async def get_price_history(
     - 'vwap': Price with Volume Weighted Average Price overlay
     - 'volume_profile': Volume distribution by price level
 
+    Set prepost=True to include pre-market and post-market data when available.
+
     Note: Not all period/interval combinations are valid. Minute intervals (1m, 5m, etc.)
     only work with short periods (1d, 5d).
     """
@@ -642,13 +648,14 @@ async def get_price_history(
             ticker.history,
             period=period,
             interval=interval,
+            prepost=prepost,
             rounding=True,
         )
     except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
         return _create_retryable_error_response(
             f"fetching price history for '{symbol}'",
             exc,
-            {"symbol": symbol, "period": period, "interval": interval},
+            {"symbol": symbol, "period": period, "interval": interval, "prepost": prepost},
         )
     except Exception as exc:
         return create_error_response(
@@ -659,6 +666,7 @@ async def get_price_history(
                 "symbol": symbol,
                 "period": period,
                 "interval": interval,
+                "prepost": prepost,
                 "exception": str(exc),
             },
         )
@@ -670,7 +678,7 @@ async def get_price_history(
             "(e.g., '1m' interval requires '1d' or '5d' period), (3) Market holidays or insufficient history. "
             "Try a longer period or daily interval.",
             error_code="NO_DATA",
-            details={"symbol": symbol, "period": period, "interval": interval},
+            details={"symbol": symbol, "period": period, "interval": interval, "prepost": prepost},
         )
 
     if chart_type is None:
