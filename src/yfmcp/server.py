@@ -400,6 +400,22 @@ async def get_top_companies(
     return dump_json(df.head(top_n).to_dict(orient="records"))
 
 
+def _industry_key(name: str) -> str:
+    """Convert human-readable industry name to Yahoo Finance API key format.
+
+    SECTOR_INDUSTY_MAPPING uses em dashes (—) and title case,
+    but the API expects lowercase with regular hyphens.
+    """
+    return (
+        name.lower()
+        .replace("& ", "")
+        .replace("- ", "")
+        .replace(", ", " ")
+        .replace("—", "-")
+        .replace(" ", "-")
+    )
+
+
 async def get_top_growth_companies(
     sector: Annotated[Sector, Field(description="Market sector (e.g., 'Technology', 'Healthcare')")],
     top_n: Annotated[int, Field(description="Number of top growth companies per industry", ge=1)],
@@ -423,7 +439,7 @@ async def get_top_growth_companies(
     results = []
     for industry_name in industries:
         try:
-            industry = await asyncio.to_thread(yf.Industry, industry_name)
+            industry = await asyncio.to_thread(yf.Industry, _industry_key(industry_name))
         except Exception as exc:
             logger.warning("Failed to load industry {}: {}", industry_name, exc)
             continue
@@ -472,7 +488,7 @@ async def get_top_performing_companies(
     results = []
     for industry_name in industries:
         try:
-            industry = await asyncio.to_thread(yf.Industry, industry_name)
+            industry = await asyncio.to_thread(yf.Industry, _industry_key(industry_name))
         except Exception as exc:
             logger.warning("Failed to load industry {}: {}", industry_name, exc)
             continue
