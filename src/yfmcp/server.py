@@ -310,7 +310,7 @@ async def get_top_etfs(
     - name: Full ETF name
     """
     try:
-        s = await asyncio.to_thread(yf.Sector, sector)
+        s = await asyncio.to_thread(yf.Sector, _sector_key(sector))
         etfs = await asyncio.to_thread(lambda: s.top_etfs)
     except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
         return _create_retryable_error_response(f"fetching top ETFs for '{sector}'", exc, {"sector": sector})
@@ -343,7 +343,7 @@ async def get_top_mutual_funds(
     - name: Full fund name
     """
     try:
-        s = await asyncio.to_thread(yf.Sector, sector)
+        s = await asyncio.to_thread(yf.Sector, _sector_key(sector))
         funds = await asyncio.to_thread(lambda: s.top_mutual_funds)
     except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
         return _create_retryable_error_response(
@@ -379,7 +379,7 @@ async def get_top_companies(
     Typically includes company identifiers, market metrics, and analyst information.
     """
     try:
-        s = await asyncio.to_thread(yf.Sector, sector)
+        s = await asyncio.to_thread(yf.Sector, _sector_key(sector))
         df = await asyncio.to_thread(lambda: s.top_companies)
     except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
         return _create_retryable_error_response(f"fetching top companies for '{sector}'", exc, {"sector": sector})
@@ -398,6 +398,11 @@ async def get_top_companies(
         )
 
     return dump_json(df.head(top_n).to_dict(orient="records"))
+
+
+def _sector_key(name: str) -> str:
+    """Convert human-readable sector name to Yahoo Finance API key format."""
+    return name.lower().replace(" ", "-")
 
 
 def _industry_key(name: str) -> str:
