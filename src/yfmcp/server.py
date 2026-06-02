@@ -406,14 +406,7 @@ def _industry_key(name: str) -> str:
     SECTOR_INDUSTY_MAPPING uses em dashes (—) and title case,
     but the API expects lowercase with regular hyphens.
     """
-    return (
-        name.lower()
-        .replace("& ", "")
-        .replace("- ", "")
-        .replace(", ", " ")
-        .replace("—", "-")
-        .replace(" ", "-")
-    )
+    return name.lower().replace("& ", "").replace("- ", "").replace(", ", " ").replace("—", "-").replace(" ", "-")
 
 
 async def get_top_growth_companies(

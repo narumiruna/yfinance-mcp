@@ -4,6 +4,7 @@ import json
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 from unittest.mock import PropertyMock
+from unittest.mock import call
 from unittest.mock import patch
 
 import pandas as pd
@@ -11,6 +12,7 @@ import pytest
 from yfinance.exceptions import YFRateLimitError
 
 from yfmcp.server import _build_financials_response
+from yfmcp.server import _industry_key
 from yfmcp.server import get_financials
 from yfmcp.server import get_holders
 from yfmcp.server import get_option_chain
@@ -42,6 +44,20 @@ def _expected_retryable_error(action: str, exception: Exception) -> str:
     if isinstance(exception, YFRateLimitError):
         return f"Rate limit reached while {action}. Try again later."
     return f"Temporary network issue while {action}. Try again later."
+
+
+@pytest.mark.parametrize(
+    ("industry_name", "expected_key"),
+    [
+        ("Communication Equipment", "communication-equipment"),
+        ("Electronics & Computer Distribution", "electronics-computer-distribution"),
+        ("Banks—Diversified", "banks-diversified"),
+        ("Furnishings, Fixtures & Appliances", "furnishings-fixtures-appliances"),
+    ],
+)
+def test_industry_key_normalizes_yfinance_mapping_names(industry_name: str, expected_key: str) -> None:
+    """Test industry names from yfinance constants are converted to API keys."""
+    assert _industry_key(industry_name) == expected_key
 
 
 class _FinancialsReadErrorTicker:
@@ -507,6 +523,48 @@ async def test_get_top_growth_companies_success(mock_to_thread: AsyncMock, mock_
     assert len(data) > 0
     assert "industry" in data[0]
     assert "top_growth_companies" in data[0]
+
+
+@pytest.mark.asyncio
+@patch(
+    "yfmcp.server.SECTOR_INDUSTY_MAPPING",
+    {"Technology": ["Communication Equipment", "Electronics & Computer Distribution", "Banks—Diversified"]},
+)
+@patch("yfmcp.server.yf.Industry")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_top_growth_companies_loads_industries_by_api_key(
+    mock_to_thread: AsyncMock,
+    mock_industry: MagicMock,
+) -> None:
+    """Test growth company retrieval passes normalized keys to yfinance."""
+    mock_industry_obj = MagicMock()
+    mock_industry_obj.top_growth_companies = pd.DataFrame(
+        {
+            "symbol": ["NVDA"],
+            "name": ["NVIDIA"],
+            "growth": [50.0],
+        }
+    )
+
+    async def mock_thread_func(func, *args):
+        if callable(func):
+            return func(*args)
+        return mock_industry_obj
+
+    mock_to_thread.side_effect = mock_thread_func
+    mock_industry.return_value = mock_industry_obj
+
+    result = await get_top_growth_companies("Technology", 1)
+    data = json.loads(result)
+
+    assert isinstance(data, list)
+    mock_industry.assert_has_calls(
+        [
+            call("communication-equipment"),
+            call("electronics-computer-distribution"),
+            call("banks-diversified"),
+        ]
+    )
 
 
 @pytest.mark.asyncio
