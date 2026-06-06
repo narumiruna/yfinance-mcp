@@ -79,6 +79,12 @@ ChartType = Literal[
     "volume_profile",
 ]
 
+ScreenerQueryType = Literal[
+    "predefined",
+    "equity",
+    "fund",
+]
+
 OptionChainType = Literal[
     "calls",
     "puts",
