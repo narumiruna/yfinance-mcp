@@ -415,7 +415,7 @@ async def screen(
 async def screen_gappers(
     min_percent_change: Annotated[
         float,
-        Field(description="Minimum percent change from prior close, for example 3.0 for +3%."),
+        Field(description="Minimum percent change from prior close, for example 3.0 for +3%.", ge=0),
     ] = 3.0,
     min_price: Annotated[
         float,
