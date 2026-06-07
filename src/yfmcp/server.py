@@ -343,6 +343,19 @@ async def screen(
     Supports predefined Yahoo screener keys and custom equity or fund query trees.
     """
     try:
+        if query_type == "predefined" and size is not None:
+            return create_error_response(
+                "For query_type='predefined', use count instead of size.",
+                error_code="INVALID_PARAMS",
+                details={"query_type": query_type, "invalid_parameter": "size", "expected_parameter": "count"},
+            )
+        if query_type in {"equity", "fund"} and count is not None:
+            return create_error_response(
+                "For query_type='equity' or 'fund', use size instead of count.",
+                error_code="INVALID_PARAMS",
+                details={"query_type": query_type, "invalid_parameter": "count", "expected_parameter": "size"},
+            )
+
         if query_type == "predefined":
             if not isinstance(query, str):
                 return create_error_response(
@@ -385,7 +398,7 @@ async def screen(
             userId=user_id,
             userIdType=user_id_type,
         )
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         return create_error_response(
             "Invalid screener query. Check operators, operands, and field values for the selected query_type.",
             error_code="INVALID_PARAMS",
@@ -415,7 +428,7 @@ async def screen(
 async def screen_gappers(
     min_percent_change: Annotated[
         float,
-        Field(description="Minimum percent change from prior close, for example 3.0 for +3%."),
+        Field(description="Minimum percent change from prior close, for example 3.0 for +3%.", ge=0),
     ] = 3.0,
     min_price: Annotated[
         float,
@@ -468,7 +481,7 @@ async def screen_gappers(
             sortField="percentchange",
             sortAsc=sort_asc,
         )
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         return create_error_response(
             "Invalid gappers screener parameters.",
             error_code="INVALID_PARAMS",

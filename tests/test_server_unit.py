@@ -1415,6 +1415,19 @@ async def test_screen_predefined_unknown_key() -> None:
 
 @pytest.mark.asyncio
 @patch("yfmcp.server.asyncio.to_thread")
+async def test_screen_predefined_rejects_size_parameter(mock_to_thread: AsyncMock) -> None:
+    """Test predefined screeners reject the custom-query size parameter."""
+    result = await screen("day_gainers", query_type="predefined", size=10)
+    data = json.loads(result)
+
+    assert data["error_code"] == "INVALID_PARAMS"
+    assert data["details"]["invalid_parameter"] == "size"
+    assert data["details"]["expected_parameter"] == "count"
+    mock_to_thread.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.asyncio.to_thread")
 async def test_screen_custom_equity_success(mock_to_thread: AsyncMock) -> None:
     """Test custom equity screener query execution."""
     mock_to_thread.return_value = {"quotes": [{"symbol": "TSLA"}], "total": 1}
@@ -1435,6 +1448,21 @@ async def test_screen_custom_equity_success(mock_to_thread: AsyncMock) -> None:
 
 @pytest.mark.asyncio
 @patch("yfmcp.server.asyncio.to_thread")
+async def test_screen_custom_rejects_count_parameter(mock_to_thread: AsyncMock) -> None:
+    """Test custom screeners reject the predefined-query count parameter."""
+    query = {"operator": "eq", "operands": ["region", "us"]}
+
+    result = await screen(query, query_type="equity", count=10)
+    data = json.loads(result)
+
+    assert data["error_code"] == "INVALID_PARAMS"
+    assert data["details"]["invalid_parameter"] == "count"
+    assert data["details"]["expected_parameter"] == "size"
+    mock_to_thread.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.asyncio.to_thread")
 async def test_screen_custom_invalid_operator_returns_invalid_params(mock_to_thread: AsyncMock) -> None:
     """Test invalid custom query operators are rejected before the API call."""
     query = {
@@ -1449,6 +1477,25 @@ async def test_screen_custom_invalid_operator_returns_invalid_params(mock_to_thr
     data = json.loads(result)
 
     assert data["error_code"] == "INVALID_PARAMS"
+    mock_to_thread.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.build_screener_query")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_screen_custom_type_error_returns_invalid_params(
+    mock_to_thread: AsyncMock, mock_build_screener_query: MagicMock
+) -> None:
+    """Test yfinance query shape type errors are treated as parameter errors."""
+    mock_build_screener_query.side_effect = TypeError("bad operand shape")
+    query = {"operator": "eq", "operands": ["percentchange", "not numeric"]}
+
+    result = await screen(query, query_type="equity")
+    data = json.loads(result)
+
+    assert data["error_code"] == "INVALID_PARAMS"
+    assert data["details"]["query_type"] == "equity"
+    assert data["details"]["exception"] == "bad operand shape"
     mock_to_thread.assert_not_called()
 
 
@@ -1472,6 +1519,23 @@ async def test_screen_gappers_success(mock_to_thread: AsyncMock) -> None:
 
     assert data["quotes"][0]["symbol"] == "IONQ"
     mock_to_thread.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.build_screener_query")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_screen_gappers_type_error_returns_invalid_params(
+    mock_to_thread: AsyncMock, mock_build_screener_query: MagicMock
+) -> None:
+    """Test gappers query validation type errors are treated as parameter errors."""
+    mock_build_screener_query.side_effect = TypeError("bad gapper operand")
+
+    result = await screen_gappers()
+    data = json.loads(result)
+
+    assert data["error_code"] == "INVALID_PARAMS"
+    assert data["details"]["exception"] == "bad gapper operand"
+    mock_to_thread.assert_not_called()
 
 
 @pytest.mark.asyncio
