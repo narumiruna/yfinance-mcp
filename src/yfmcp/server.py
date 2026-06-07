@@ -385,7 +385,7 @@ async def screen(
             userId=user_id,
             userIdType=user_id_type,
         )
-    except ValueError as exc:
+    except (ValueError, TypeError) as exc:
         return create_error_response(
             "Invalid screener query. Check operators, operands, and field values for the selected query_type.",
             error_code="INVALID_PARAMS",
