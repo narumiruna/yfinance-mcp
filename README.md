@@ -72,6 +72,61 @@ Get top-ranked financial entities within a market sector.
 
 `Basic Materials`, `Communication Services`, `Consumer Cyclical`, `Consumer Defensive`, `Energy`, `Financial Services`, `Healthcare`, `Industrials`, `Real Estate`, `Technology`, `Utilities`
 
+### `yfinance_screen`
+
+Run Yahoo Finance screeners using either predefined screener keys or custom query trees.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string/object | Yes | For `query_type="predefined"`: screener key such as `"day_gainers"`. For `query_type="equity"` or `"fund"`: custom query tree with `{operator, operands}` nodes |
+| `query_type` | string | No | `"predefined"` (default), `"equity"`, or `"fund"` |
+| `offset` | number | No | Result offset |
+| `size` | number | No | Rows for custom queries; Yahoo maximum is `250` |
+| `count` | number | No | Rows for predefined queries; Yahoo maximum is `250` |
+| `sort_field` | string | No | Sort field, for example `"percentchange"` |
+| `sort_asc` | boolean | No | Sort ascending if `true`, descending if `false` |
+| `user_id` | string | No | Optional Yahoo user identifier |
+| `user_id_type` | string | No | Optional Yahoo user ID type, commonly `"guid"` |
+
+**Returns:** JSON screener response from Yahoo Finance, typically including quote rows and metadata.
+
+Custom equity screener example:
+
+```json
+{
+  "query_type": "equity",
+  "query": {
+    "operator": "and",
+    "operands": [
+      { "operator": "gt", "operands": ["percentchange", 3] },
+      { "operator": "eq", "operands": ["region", "us"] },
+      { "operator": "gte", "operands": ["intradayprice", 5] },
+      { "operator": "gt", "operands": ["dayvolume", 500000] }
+    ]
+  },
+  "sort_field": "percentchange",
+  "sort_asc": false,
+  "size": 50
+}
+```
+
+### `yfinance_screen_gappers`
+
+Run a purpose-built custom screener for opening-session bullish gappers.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `min_percent_change` | number | No | Minimum percent gap/change from prior close (default: `3.0`) |
+| `min_price` | number | No | Minimum intraday price (default: `5.0`) |
+| `min_volume` | number | No | Minimum day volume (default: `500000`) |
+| `min_market_cap` | number | No | Minimum intraday market cap in USD (default: `2000000000`) |
+| `region` | string | No | Yahoo region code (default: `"us"`) |
+| `size` | number | No | Number of results (default: `50`, max: `250`) |
+| `offset` | number | No | Result offset for pagination (default: `0`) |
+| `sort_asc` | boolean | No | Sort by `percentchange` ascending (`true`) or descending (`false`, default) |
+
+**Returns:** JSON screener response from Yahoo Finance.
+
 ### `yfinance_get_price_history`
 
 Fetch historical price data and optionally generate technical analysis charts.

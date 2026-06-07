@@ -13,10 +13,12 @@ from yfinance.const import SECTOR_INDUSTY_MAPPING
 from yfinance.exceptions import YFRateLimitError
 
 from yfmcp.chart import generate_chart
+from yfmcp.screener import build_screener_query
 from yfmcp.types import ChartType
 from yfmcp.types import Interval
 from yfmcp.types import OptionChainType
 from yfmcp.types import Period
+from yfmcp.types import ScreenerQueryType
 from yfmcp.types import SearchType
 from yfmcp.types import Sector
 from yfmcp.types import TopType
@@ -297,6 +299,204 @@ async def search(
                 error_code="INVALID_PARAMS",
                 details={"search_type": search_type, "valid_options": ["all", "quotes", "news"]},
             )
+
+
+@mcp.tool(
+    name="yfinance_screen",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
+async def screen(
+    query: Annotated[
+        str | dict[str, Any],
+        Field(
+            description=(
+                "Screener query. For query_type='predefined': string key like 'day_gainers'. "
+                "For query_type='equity' or 'fund': query tree object with {operator, operands} nodes."
+            )
+        ),
+    ],
+    query_type: Annotated[
+        ScreenerQueryType,
+        Field(description="Query mode: 'predefined', 'equity', or 'fund'."),
+    ] = "predefined",
+    offset: Annotated[int | None, Field(description="Result offset.", ge=0)] = None,
+    size: Annotated[
+        int | None,
+        Field(description="Rows to return for custom queries. Yahoo maximum is 250.", ge=1, le=250),
+    ] = None,
+    count: Annotated[
+        int | None,
+        Field(description="Rows to return for predefined queries. Yahoo maximum is 250.", ge=1, le=250),
+    ] = None,
+    sort_field: Annotated[str | None, Field(description="Sort field, for example 'percentchange'.")] = None,
+    sort_asc: Annotated[bool | None, Field(description="Sort ascending if true, descending if false.")] = None,
+    user_id: Annotated[str | None, Field(description="Optional Yahoo user id.")] = None,
+    user_id_type: Annotated[str | None, Field(description="Optional Yahoo user id type, commonly 'guid'.")] = None,
+) -> str:
+    """Run a Yahoo Finance screener query.
+
+    Supports predefined Yahoo screener keys and custom equity or fund query trees.
+    """
+    try:
+        if query_type == "predefined" and size is not None:
+            return create_error_response(
+                "For query_type='predefined', use count instead of size.",
+                error_code="INVALID_PARAMS",
+                details={"query_type": query_type, "invalid_parameter": "size", "expected_parameter": "count"},
+            )
+        if query_type in {"equity", "fund"} and count is not None:
+            return create_error_response(
+                "For query_type='equity' or 'fund', use size instead of count.",
+                error_code="INVALID_PARAMS",
+                details={"query_type": query_type, "invalid_parameter": "count", "expected_parameter": "size"},
+            )
+
+        if query_type == "predefined":
+            if not isinstance(query, str):
+                return create_error_response(
+                    "For query_type='predefined', query must be a string screener key.",
+                    error_code="INVALID_PARAMS",
+                    details={"query_type": query_type, "expected_query_type": "string"},
+                )
+
+            predefined = getattr(yf, "PREDEFINED_SCREENER_QUERIES", {})
+            if query not in predefined:
+                return create_error_response(
+                    f"Unknown predefined screener '{query}'.",
+                    error_code="INVALID_PARAMS",
+                    details={
+                        "query": query,
+                        "query_type": query_type,
+                        "valid_predefined_queries": sorted(predefined.keys()),
+                    },
+                )
+
+            resolved_query: str | Any = query
+        else:
+            if not isinstance(query, dict):
+                return create_error_response(
+                    "For query_type='equity' or 'fund', query must be an object with 'operator' and 'operands'.",
+                    error_code="INVALID_PARAMS",
+                    details={"query_type": query_type, "expected_query_type": "object"},
+                )
+
+            resolved_query = build_screener_query(query_type=query_type, query=query)
+
+        result = await asyncio.to_thread(
+            yf.screen,
+            resolved_query,
+            offset=offset,
+            size=size,
+            count=count,
+            sortField=sort_field,
+            sortAsc=sort_asc,
+            userId=user_id,
+            userIdType=user_id_type,
+        )
+    except (TypeError, ValueError) as exc:
+        return create_error_response(
+            "Invalid screener query. Check operators, operands, and field values for the selected query_type.",
+            error_code="INVALID_PARAMS",
+            details={"query_type": query_type, "exception": str(exc)},
+        )
+    except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
+        return _create_retryable_error_response("running screener query", exc, {"query_type": query_type})
+    except Exception as exc:
+        return create_error_response(
+            "Failed to run screener query.",
+            error_code="API_ERROR",
+            details={"query_type": query_type, "exception": str(exc)},
+        )
+
+    return dump_json(result)
+
+
+@mcp.tool(
+    name="yfinance_screen_gappers",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
+async def screen_gappers(
+    min_percent_change: Annotated[
+        float,
+        Field(description="Minimum percent change from prior close, for example 3.0 for +3%.", ge=0),
+    ] = 3.0,
+    min_price: Annotated[
+        float,
+        Field(description="Minimum current intraday price.", ge=0),
+    ] = 5.0,
+    min_volume: Annotated[
+        int,
+        Field(description="Minimum intraday trading volume.", ge=0),
+    ] = 500000,
+    min_market_cap: Annotated[
+        int,
+        Field(description="Minimum intraday market cap in USD.", ge=0),
+    ] = 2000000000,
+    region: Annotated[
+        str,
+        Field(description="Yahoo screener region code, for example 'us'."),
+    ] = "us",
+    size: Annotated[
+        int,
+        Field(description="Rows to return. Yahoo maximum is 250.", ge=1, le=250),
+    ] = 50,
+    offset: Annotated[
+        int,
+        Field(description="Result offset for pagination.", ge=0),
+    ] = 0,
+    sort_asc: Annotated[
+        bool,
+        Field(description="Sort by percentchange ascending if true, descending if false."),
+    ] = False,
+) -> str:
+    """Run a custom equity screener tuned for opening-session stock gappers."""
+    query = {
+        "operator": "and",
+        "operands": [
+            {"operator": "gte", "operands": ["percentchange", min_percent_change]},
+            {"operator": "eq", "operands": ["region", region]},
+            {"operator": "gte", "operands": ["intradaymarketcap", min_market_cap]},
+            {"operator": "gte", "operands": ["intradayprice", min_price]},
+            {"operator": "gte", "operands": ["dayvolume", min_volume]},
+        ],
+    }
+
+    try:
+        resolved_query = build_screener_query(query_type="equity", query=query)
+        result = await asyncio.to_thread(
+            yf.screen,
+            resolved_query,
+            offset=offset,
+            size=size,
+            sortField="percentchange",
+            sortAsc=sort_asc,
+        )
+    except (TypeError, ValueError) as exc:
+        return create_error_response(
+            "Invalid gappers screener parameters.",
+            error_code="INVALID_PARAMS",
+            details={"exception": str(exc)},
+        )
+    except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
+        return _create_retryable_error_response("running gappers screener", exc, {})
+    except Exception as exc:
+        return create_error_response(
+            "Failed to run gappers screener.",
+            error_code="API_ERROR",
+            details={"exception": str(exc)},
+        )
+
+    return dump_json(result)
 
 
 async def get_top_etfs(
