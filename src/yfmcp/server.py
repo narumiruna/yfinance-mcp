@@ -467,7 +467,7 @@ async def screen_gappers(
             {"operator": "eq", "operands": ["region", region]},
             {"operator": "gte", "operands": ["intradaymarketcap", min_market_cap]},
             {"operator": "gte", "operands": ["intradayprice", min_price]},
-            {"operator": "gt", "operands": ["dayvolume", min_volume]},
+            {"operator": "gte", "operands": ["dayvolume", min_volume]},
         ],
     }
 
