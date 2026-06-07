@@ -342,6 +342,19 @@ async def screen(
 
     Supports predefined Yahoo screener keys and custom equity or fund query trees.
     """
+    if query_type == "predefined" and size is not None:
+        return create_error_response(
+            "For query_type='predefined', use 'count' instead of 'size'.",
+            error_code="INVALID_PARAMS",
+            details={"query_type": query_type, "invalid_param": "size"},
+        )
+    if query_type in {"equity", "fund"} and count is not None:
+        return create_error_response(
+            "For query_type='equity' or 'fund', use 'size' instead of 'count'.",
+            error_code="INVALID_PARAMS",
+            details={"query_type": query_type, "invalid_param": "count"},
+        )
+
     try:
         if query_type == "predefined":
             if not isinstance(query, str):
@@ -468,7 +481,7 @@ async def screen_gappers(
             sortField="percentchange",
             sortAsc=sort_asc,
         )
-    except ValueError as exc:
+    except (ValueError, TypeError) as exc:
         return create_error_response(
             "Invalid gappers screener parameters.",
             error_code="INVALID_PARAMS",

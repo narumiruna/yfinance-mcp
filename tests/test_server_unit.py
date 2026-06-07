@@ -1415,6 +1415,37 @@ async def test_screen_predefined_unknown_key() -> None:
 
 @pytest.mark.asyncio
 @patch("yfmcp.server.asyncio.to_thread")
+async def test_screen_predefined_rejects_size_param(mock_to_thread: AsyncMock) -> None:
+    """Test predefined screeners reject size and require count."""
+    result = await screen("day_gainers", query_type="predefined", size=10)
+    data = json.loads(result)
+
+    assert data["error_code"] == "INVALID_PARAMS"
+    assert data["details"]["invalid_param"] == "size"
+    mock_to_thread.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_screen_custom_rejects_count_param(mock_to_thread: AsyncMock) -> None:
+    """Test custom equity/fund screeners reject count and require size."""
+    query = {
+        "operator": "and",
+        "operands": [
+            {"operator": "gt", "operands": ["percentchange", 3]},
+            {"operator": "eq", "operands": ["region", "us"]},
+        ],
+    }
+    result = await screen(query, query_type="equity", count=10)
+    data = json.loads(result)
+
+    assert data["error_code"] == "INVALID_PARAMS"
+    assert data["details"]["invalid_param"] == "count"
+    mock_to_thread.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.asyncio.to_thread")
 async def test_screen_custom_equity_success(mock_to_thread: AsyncMock) -> None:
     """Test custom equity screener query execution."""
     mock_to_thread.return_value = {"quotes": [{"symbol": "TSLA"}], "total": 1}
@@ -1485,3 +1516,16 @@ async def test_screen_gappers_api_error(mock_to_thread: AsyncMock) -> None:
 
     assert data["error_code"] == "API_ERROR"
     assert data["details"]["exception"] == "Yahoo failed"
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_screen_gappers_type_error_returns_invalid_params(mock_to_thread: AsyncMock) -> None:
+    """Test gappers type validation errors return invalid params."""
+    mock_to_thread.side_effect = TypeError("invalid type")
+
+    result = await screen_gappers()
+    data = json.loads(result)
+
+    assert data["error_code"] == "INVALID_PARAMS"
+    assert data["details"]["exception"] == "invalid type"
