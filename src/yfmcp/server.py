@@ -463,7 +463,7 @@ async def screen_gappers(
     query = {
         "operator": "and",
         "operands": [
-            {"operator": "gt", "operands": ["percentchange", min_percent_change]},
+            {"operator": "gte", "operands": ["percentchange", min_percent_change]},
             {"operator": "eq", "operands": ["region", region]},
             {"operator": "gte", "operands": ["intradaymarketcap", min_market_cap]},
             {"operator": "gte", "operands": ["intradayprice", min_price]},
