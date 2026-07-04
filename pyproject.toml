@@ -26,7 +26,7 @@ yfmcp = "yfmcp.server:main"
 [dependency-groups]
 dev = [
   "mcp[cli]>=1.27.0",
-  "pytest>=9.0.3",
+  "pytest>=9.1.1",
   "pytest-asyncio>=1.3.0",
   "pytest-cov>=7.1.0",
   "ruff>=0.15.12",
