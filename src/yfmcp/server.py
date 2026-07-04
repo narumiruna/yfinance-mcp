@@ -387,12 +387,13 @@ async def screen(
 
             resolved_query = build_screener_query(query_type=query_type, query=query)
 
+        upstream_size = count if query_type == "predefined" else size
         result = await asyncio.to_thread(
             yf.screen,
             resolved_query,
             offset=offset,
-            size=size,
-            count=count,
+            size=upstream_size,
+            count=None,
             sortField=sort_field,
             sortAsc=sort_asc,
             userId=user_id,
