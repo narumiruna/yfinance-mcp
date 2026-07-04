@@ -5,7 +5,6 @@ import matplotlib
 
 matplotlib.use("Agg")  # Use non-interactive backend (must be set before pyplot is imported)
 
-import matplotlib.cm as cm
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
@@ -166,7 +165,7 @@ def generate_chart(symbol: str, df: pd.DataFrame, chart_type: ChartType) -> Imag
         ax_volume.grid(True, alpha=0.3, axis="y")
 
         # Plot volume profile as horizontal bars on the right
-        viridis = cm.get_cmap("viridis")
+        viridis = plt.get_cmap("viridis")
         colors = viridis(np.linspace(0, 1, len(volume_profile)))
         ax_profile.barh(volume_profile.index, volume_profile.values, color=colors, alpha=VOLUME_PROFILE_ALPHA)
         ax_profile.set_xlabel("Volume", fontsize=10)
