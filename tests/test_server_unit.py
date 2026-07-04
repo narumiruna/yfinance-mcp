@@ -1390,6 +1390,10 @@ async def test_screen_predefined_success(mock_to_thread: AsyncMock) -> None:
     assert data["quotes"] == [{"symbol": "AAPL"}]
     assert data["total"] == 1
     mock_to_thread.assert_called_once()
+    args, kwargs = mock_to_thread.call_args
+    assert args[1] == "day_gainers"
+    assert kwargs["size"] == 10
+    assert kwargs["count"] is None
 
 
 @pytest.mark.asyncio
@@ -1444,6 +1448,9 @@ async def test_screen_custom_equity_success(mock_to_thread: AsyncMock) -> None:
 
     assert data["quotes"][0]["symbol"] == "TSLA"
     mock_to_thread.assert_called_once()
+    _, kwargs = mock_to_thread.call_args
+    assert kwargs["size"] == 25
+    assert kwargs["count"] is None
 
 
 @pytest.mark.asyncio
