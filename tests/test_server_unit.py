@@ -9,7 +9,10 @@ from unittest.mock import patch
 
 import pandas as pd
 import pytest
+from yfinance.exceptions import YFInvalidPeriodError
+from yfinance.exceptions import YFPricesMissingError
 from yfinance.exceptions import YFRateLimitError
+from yfinance.exceptions import YFTzMissingError
 
 from yfmcp.server import _build_financials_response
 from yfmcp.server import _industry_key
@@ -297,7 +300,9 @@ async def test_get_price_history_returns_markdown_table_when_chart_type_is_none(
     assert "Open" in result
     assert "Close" in result
     assert "|" in result
-    mock_ticker_obj.history.assert_called_once_with(period="1mo", interval="1d", prepost=False, rounding=True)
+    mock_ticker_obj.history.assert_called_once_with(
+        period="1mo", interval="1d", prepost=False, rounding=True, raise_errors=True
+    )
 
 
 @pytest.mark.asyncio
@@ -323,7 +328,9 @@ async def test_get_price_history_passes_prepost_to_yfinance(mock_to_thread: Asyn
     result = await get_price_history("AAPL", "1d", "1m", None, True)
 
     assert isinstance(result, str)
-    mock_ticker_obj.history.assert_called_once_with(period="1d", interval="1m", prepost=True, rounding=True)
+    mock_ticker_obj.history.assert_called_once_with(
+        period="1d", interval="1m", prepost=True, rounding=True, raise_errors=True
+    )
 
 
 @pytest.mark.asyncio
@@ -363,6 +370,160 @@ async def test_get_price_history_api_error_includes_prepost_detail(
     assert data["error_code"] == "API_ERROR"
     assert data["details"]["prepost"] is True
     assert data["details"]["exception"] == "history failed"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exception", [TimeoutError("timed out"), OSError("network unreachable")])
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_price_history_retryable_transport_error_returns_network_error(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock, exception: Exception
+) -> None:
+    """Test transport errors while fetching price history return network errors."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.history.side_effect = exception
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_price_history("AAPL", "1d", "1m", None, True)
+    data = json.loads(result)
+
+    assert data["error_code"] == "NETWORK_ERROR"
+    assert data["error"] == _expected_retryable_error("fetching price history for 'AAPL'", exception)
+    assert data["details"] == {
+        "symbol": "AAPL",
+        "period": "1d",
+        "interval": "1m",
+        "prepost": True,
+        "exception": str(exception),
+    }
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_price_history_rate_limit_returns_network_error(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock
+) -> None:
+    """Test rate limits while fetching price history return network errors."""
+    exception = YFRateLimitError()
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.history.side_effect = exception
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_price_history("AAPL", "1d", "1m", None, True)
+    data = json.loads(result)
+
+    assert data["error_code"] == "NETWORK_ERROR"
+    assert data["error"] == "Rate limit reached while fetching price history for 'AAPL'. Try again later."
+    assert data["details"] == {
+        "symbol": "AAPL",
+        "period": "1d",
+        "interval": "1m",
+        "prepost": True,
+        "exception": str(exception),
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exception",
+    [
+        YFTzMissingError("AAPL"),
+        YFInvalidPeriodError("AAPL", "bad", "1d, 5d"),
+        YFPricesMissingError("AAPL", " (period=1d)"),
+        YFPricesMissingError("AAPL", ' (period=1d) (Yahoo error = "No data found, symbol may be delisted")'),
+    ],
+)
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_price_history_yfinance_no_data_exceptions_include_details(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock, exception: Exception
+) -> None:
+    """Test no-data yfinance exceptions include request details and the exception."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.history.side_effect = exception
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_price_history("AAPL", "1d", "1m", None, True)
+    data = json.loads(result)
+
+    assert data["error_code"] == "NO_DATA"
+    assert data["details"] == {
+        "symbol": "AAPL",
+        "period": "1d",
+        "interval": "1m",
+        "prepost": True,
+        "exception": str(exception),
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exception",
+    [
+        YFPricesMissingError("AAPL", " (period=1d) (Yahoo status_code = 401)"),
+        YFPricesMissingError("AAPL", ' (period=1d) (Yahoo error = "Invalid Crumb")'),
+    ],
+)
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_price_history_yfinance_prices_missing_upstream_error_returns_api_error(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock, exception: Exception
+) -> None:
+    """Test upstream Yahoo status/chart errors are not misclassified as no data."""
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.history.side_effect = exception
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_price_history("AAPL", "1d", "1m", None, True)
+    data = json.loads(result)
+
+    assert data["error_code"] == "API_ERROR"
+    assert data["details"]["exception"] == str(exception)
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_price_history_yfinance_prices_missing_rate_limit_returns_network_error(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock
+) -> None:
+    """Test rate-limit-like price-missing errors return network errors."""
+    exception = YFPricesMissingError("AAPL", ' (period=1d) (Yahoo error = "Too Many Requests")')
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.history.side_effect = exception
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_price_history("AAPL", "1d", "1m", None, True)
+    data = json.loads(result)
+
+    assert data["error_code"] == "NETWORK_ERROR"
+    assert data["error"] == "Rate limit reached while fetching price history for 'AAPL'. Try again later."
+    assert data["details"]["exception"] == str(exception)
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_price_history_yfinance_prices_missing_symbol_name_does_not_trigger_rate_limit(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock
+) -> None:
+    """Test ticker text alone does not trigger rate-limit classification."""
+    exception = YFPricesMissingError("RATELIMIT", " (period=1d)")
+    mock_ticker_obj = MagicMock()
+    mock_ticker_obj.history.side_effect = exception
+    mock_ticker.return_value = mock_ticker_obj
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_price_history("RATELIMIT", "1d", "1m", None, True)
+    data = json.loads(result)
+
+    assert data["error_code"] == "NO_DATA"
 
 
 @pytest.mark.asyncio

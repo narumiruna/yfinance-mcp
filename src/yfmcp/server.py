@@ -10,7 +10,10 @@ from mcp.types import ImageContent
 from mcp.types import ToolAnnotations
 from pydantic import Field
 from yfinance.const import SECTOR_INDUSTY_MAPPING
+from yfinance.exceptions import YFInvalidPeriodError
+from yfinance.exceptions import YFPricesMissingError
 from yfinance.exceptions import YFRateLimitError
+from yfinance.exceptions import YFTzMissingError
 
 from yfmcp.chart import generate_chart
 from yfmcp.screener import build_screener_query
@@ -52,6 +55,106 @@ def _create_retryable_error_response(action: str, exc: BaseException, details: d
         message = f"Temporary network issue while {action}. Try again later."
 
     return create_error_response(message, error_code="NETWORK_ERROR", details={**details, "exception": str(exc)})
+
+
+def _price_history_details(
+    symbol: str,
+    period: Period,
+    interval: Interval,
+    prepost: bool,
+    exc: BaseException | None = None,
+) -> dict[str, Any]:
+    details: dict[str, Any] = {"symbol": symbol, "period": period, "interval": interval, "prepost": prepost}
+    if exc is not None:
+        details["exception"] = str(exc)
+    return details
+
+
+def _create_price_history_no_data_response(
+    symbol: str,
+    period: Period,
+    interval: Interval,
+    prepost: bool,
+    exc: BaseException | None = None,
+) -> str:
+    return create_error_response(
+        f"No price data available for '{symbol}' with period='{period}' and interval='{interval}'. "
+        "Common issues: (1) Invalid symbol, (2) Incompatible period/interval combination "
+        "(e.g., '1m' interval requires '1d' or '5d' period), (3) Market holidays or insufficient history. "
+        "Try a longer period or daily interval.",
+        error_code="NO_DATA",
+        details=_price_history_details(symbol, period, interval, prepost, exc),
+    )
+
+
+def _create_price_history_api_error_response(
+    symbol: str,
+    period: Period,
+    interval: Interval,
+    prepost: bool,
+    exc: BaseException,
+) -> str:
+    return create_error_response(
+        f"Failed to fetch price history for '{symbol}'. "
+        "Verify the symbol is correct and the period/interval combination is valid.",
+        error_code="API_ERROR",
+        details=_price_history_details(symbol, period, interval, prepost, exc),
+    )
+
+
+def _is_price_history_rate_limit_message(message: str) -> bool:
+    normalized = message.lower()
+    return any(
+        indicator in normalized
+        for indicator in (
+            "too many requests",
+            "rate limit",
+            "rate-limit",
+            "ratelimit",
+            "status_code = 429",
+            "status_code=429",
+        )
+    )
+
+
+def _is_price_history_no_data_prices_missing_error(exc: YFPricesMissingError) -> bool:
+    debug_info = str(getattr(exc, "debug_info", "") or "").lower()
+
+    if "yahoo status_code" in debug_info:
+        return False
+
+    if "yahoo error" in debug_info:
+        return any(
+            indicator in debug_info
+            for indicator in (
+                "no data found",
+                "symbol may be delisted",
+                "possibly delisted",
+            )
+        )
+
+    return True
+
+
+def _create_price_history_prices_missing_error_response(
+    symbol: str,
+    period: Period,
+    interval: Interval,
+    prepost: bool,
+    exc: YFPricesMissingError,
+) -> str:
+    rate_limit_context = f"{getattr(exc, 'debug_info', '')} {getattr(exc, 'rationale', '')}"
+    if _is_price_history_rate_limit_message(rate_limit_context):
+        return create_error_response(
+            f"Rate limit reached while fetching price history for '{symbol}'. Try again later.",
+            error_code="NETWORK_ERROR",
+            details=_price_history_details(symbol, period, interval, prepost, exc),
+        )
+
+    if _is_price_history_no_data_prices_missing_error(exc):
+        return _create_price_history_no_data_response(symbol, period, interval, prepost, exc)
+
+    return _create_price_history_api_error_response(symbol, period, interval, prepost, exc)
 
 
 def _select_retryable_exception(exceptions: list[Exception]) -> BaseException:
@@ -865,36 +968,23 @@ async def get_price_history(
             interval=interval,
             prepost=prepost,
             rounding=True,
+            raise_errors=True,
         )
     except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
         return _create_retryable_error_response(
             f"fetching price history for '{symbol}'",
             exc,
-            {"symbol": symbol, "period": period, "interval": interval, "prepost": prepost},
+            _price_history_details(symbol, period, interval, prepost),
         )
+    except (YFTzMissingError, YFInvalidPeriodError) as exc:
+        return _create_price_history_no_data_response(symbol, period, interval, prepost, exc)
+    except YFPricesMissingError as exc:
+        return _create_price_history_prices_missing_error_response(symbol, period, interval, prepost, exc)
     except Exception as exc:
-        return create_error_response(
-            f"Failed to fetch price history for '{symbol}'. "
-            "Verify the symbol is correct and the period/interval combination is valid.",
-            error_code="API_ERROR",
-            details={
-                "symbol": symbol,
-                "period": period,
-                "interval": interval,
-                "prepost": prepost,
-                "exception": str(exc),
-            },
-        )
+        return _create_price_history_api_error_response(symbol, period, interval, prepost, exc)
 
     if df.empty:
-        return create_error_response(
-            f"No price data available for '{symbol}' with period='{period}' and interval='{interval}'. "
-            "Common issues: (1) Invalid symbol, (2) Incompatible period/interval combination "
-            "(e.g., '1m' interval requires '1d' or '5d' period), (3) Market holidays or insufficient history. "
-            "Try a longer period or daily interval.",
-            error_code="NO_DATA",
-            details={"symbol": symbol, "period": period, "interval": interval, "prepost": prepost},
-        )
+        return _create_price_history_no_data_response(symbol, period, interval, prepost)
 
     if chart_type is None:
         return df.to_markdown()
