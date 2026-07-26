@@ -17,7 +17,7 @@ dependencies    = [
   "mcp>=1.28.1",
   # Required by pandas.DataFrame.to_markdown() for price history table output.
   "tabulate>=0.10.0",
-  "yfinance>=1.5.1",
+  "yfinance>=1.5.2",
 ]
 
 [project.scripts]
