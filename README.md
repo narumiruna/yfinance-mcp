@@ -1,5 +1,7 @@
 # Yahoo Finance MCP Server
 
+<!-- mcp-name: io.github.narumiruna/yfinance-mcp -->
+
 [![PyPI version](https://img.shields.io/pypi/v/yfmcp)](https://pypi.org/project/yfmcp/)
 [![Python](https://img.shields.io/pypi/pyversions/yfmcp.svg)](https://pypi.org/project/yfmcp/)
 [![CI](https://github.com/narumiruna/yfinance-mcp/actions/workflows/python.yml/badge.svg)](https://github.com/narumiruna/yfinance-mcp/actions/workflows/python.yml)
