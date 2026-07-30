@@ -1670,7 +1670,7 @@ wheels = [
 
 [[package]]
 name = "yfmcp"
-version = "0.12.3"
+version = "0.12.4"
 source = { editable = "." }
 dependencies = [
     { name = "loguru" },

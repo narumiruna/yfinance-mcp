@@ -9,13 +9,13 @@
     "source": "github",
     "id": "957440248"
   },
-  "version": "0.12.3",
+  "version": "0.12.4",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "yfmcp",
-      "version": "0.12.3",
+      "version": "0.12.4",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
