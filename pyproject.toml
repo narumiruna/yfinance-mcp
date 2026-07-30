@@ -43,6 +43,11 @@ tag              = true
 commit           = true
 pre_commit_hooks = ["uv lock", "git add uv.lock"]
 
+[[tool.bumpversion.files]]
+filename = "server.json"
+search   = '"version": "{current_version}"'
+replace  = '"version": "{new_version}"'
+
 [tool.pytest]
 filterwarnings = ["ignore::DeprecationWarning"]
 
