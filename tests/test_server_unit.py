@@ -17,6 +17,7 @@ from yfinance.exceptions import YFTzMissingError
 from yfmcp.server import _build_financials_response
 from yfmcp.server import _industry_key
 from yfmcp.server import _sector_key
+from yfmcp.server import get_analyst_price_targets
 from yfmcp.server import get_financials
 from yfmcp.server import get_holders
 from yfmcp.server import get_option_chain
@@ -50,6 +51,72 @@ def _expected_retryable_error(action: str, exception: Exception) -> str:
     if isinstance(exception, YFRateLimitError):
         return f"Rate limit reached while {action}. Try again later."
     return f"Temporary network issue while {action}. Try again later."
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_analyst_price_targets_success(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test analyst price targets are returned as JSON."""
+    targets = {"current": 225.0, "low": 180.0, "high": 300.0, "mean": 240.0, "median": 235.0}
+    mock_ticker.return_value.analyst_price_targets = targets
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_analyst_price_targets("AAPL")
+
+    assert json.loads(result) == targets
+    mock_ticker.assert_called_once_with("AAPL")
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_analyst_price_targets_no_data(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test missing analyst coverage returns a structured no-data response."""
+    mock_ticker.return_value.analyst_price_targets = {}
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_analyst_price_targets("NOANALYSTS")
+    data = json.loads(result)
+
+    assert data["error_code"] == "NO_DATA"
+    assert data["details"]["symbol"] == "NOANALYSTS"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exception", [TimeoutError("timed out"), OSError("network unreachable"), YFRateLimitError()])
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_analyst_price_targets_network_error(
+    mock_to_thread: AsyncMock,
+    mock_ticker: MagicMock,
+    exception: Exception,
+) -> None:
+    """Test retryable analyst target failures return structured network errors."""
+    type(mock_ticker.return_value).analyst_price_targets = PropertyMock(side_effect=exception)
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_analyst_price_targets("AAPL")
+    data = json.loads(result)
+
+    assert data["error_code"] == "NETWORK_ERROR"
+    assert data["error"] == _expected_retryable_error("fetching analyst price targets for 'AAPL'", exception)
+    assert data["details"]["symbol"] == "AAPL"
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_analyst_price_targets_api_error(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test unexpected analyst target failures return structured API errors."""
+    type(mock_ticker.return_value).analyst_price_targets = PropertyMock(side_effect=RuntimeError("fetch failed"))
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_analyst_price_targets("AAPL")
+    data = json.loads(result)
+
+    assert data["error_code"] == "API_ERROR"
+    assert data["details"] == {"symbol": "AAPL", "exception": "fetch failed"}
 
 
 @pytest.mark.parametrize(

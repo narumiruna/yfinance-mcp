@@ -285,6 +285,55 @@ async def get_ticker_info(
 
 
 @mcp.tool(
+    name="yfinance_get_analyst_price_targets",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
+async def get_analyst_price_targets(
+    symbol: Annotated[str, Field(description="Stock ticker symbol (e.g., 'AAPL', 'GOOGL', 'MSFT')")],
+) -> str:
+    """Fetch the current price and analyst consensus price targets for a stock.
+
+    Returns a JSON object with the fields supplied by Yahoo Finance:
+    - current: Current market price
+    - low: Lowest analyst price target
+    - high: Highest analyst price target
+    - mean: Mean analyst price target
+    - median: Median analyst price target
+
+    Analyst coverage and available fields vary by symbol.
+    """
+    try:
+        ticker = await asyncio.to_thread(yf.Ticker, symbol)
+        targets = await asyncio.to_thread(lambda: ticker.analyst_price_targets)
+    except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
+        return _create_retryable_error_response(
+            f"fetching analyst price targets for '{symbol}'",
+            exc,
+            {"symbol": symbol},
+        )
+    except Exception as exc:
+        return create_error_response(
+            f"Failed to fetch analyst price targets for '{symbol}'. Verify the symbol is correct.",
+            error_code="API_ERROR",
+            details={"symbol": symbol, "exception": str(exc)},
+        )
+
+    if not targets:
+        return create_error_response(
+            f"No analyst price targets available for '{symbol}'.",
+            error_code="NO_DATA",
+            details={"symbol": symbol},
+        )
+
+    return dump_json(targets)
+
+
+@mcp.tool(
     name="yfinance_get_ticker_news",
     annotations=ToolAnnotations(
         readOnlyHint=True,

@@ -16,6 +16,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 ## Features
 
 - **Stock Data** — Company info, financials, valuation metrics, dividends, and trading data
+- **Analyst Price Targets** — Current price and analyst low, high, mean, and median targets
 - **Financial Statements** — Income statement and balance sheet with historical data (EBIT, Invested Capital, etc.)
 - **Financial News** — Recent news articles and press releases for any ticker
 - **Search** — Find stocks, ETFs, and news across Yahoo Finance
@@ -36,6 +37,16 @@ Retrieve comprehensive stock data including company info, financials, trading me
 | `symbol` | string | Yes | Stock ticker symbol (e.g. `AAPL`, `GOOGL`, `MSFT`) |
 
 **Returns:** JSON object with company details, price data, valuation metrics, trading info, dividends, financials, and performance indicators.
+
+### `yfinance_get_analyst_price_targets`
+
+Fetch the current price and analyst consensus price targets for a stock.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `symbol` | string | Yes | Stock ticker symbol (e.g. `AAPL`, `GOOGL`, `MSFT`) |
+
+**Returns:** JSON object with `current`, `low`, `high`, `mean`, and `median` price fields. Analyst coverage and available fields vary by symbol.
 
 ### `yfinance_get_ticker_news`
 
