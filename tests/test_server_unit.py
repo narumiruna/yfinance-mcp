@@ -187,6 +187,27 @@ async def test_get_upgrades_downgrades_max_rows_zero_returns_all_rows(
 
 
 @pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_upgrades_downgrades_normalizes_missing_values(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock
+) -> None:
+    """Test missing analyst fields are encoded as strict JSON null values."""
+    history = _upgrades_downgrades_df()
+    latest_index = history.index.max()
+    history.loc[latest_index, "FromGrade"] = pd.NA
+    history.loc[latest_index, "currentPriceTarget"] = float("nan")
+    mock_ticker.return_value.upgrades_downgrades = history
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_upgrades_downgrades("AAPL")
+    data = json.loads(result, parse_constant=lambda value: pytest.fail(f"Invalid JSON constant: {value}"))
+
+    assert data["upgrades_downgrades"][0]["FromGrade"] is None
+    assert data["upgrades_downgrades"][0]["currentPriceTarget"] is None
+
+
+@pytest.mark.asyncio
 async def test_get_upgrades_downgrades_rejects_negative_max_rows() -> None:
     """Test a negative row limit returns a structured parameter error."""
     result = await get_upgrades_downgrades("AAPL", max_rows=-1)

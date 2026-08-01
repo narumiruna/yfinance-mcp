@@ -394,6 +394,7 @@ async def get_upgrades_downgrades(
     history = history.sort_index(ascending=False).reset_index()
     total_rows = len(history)
     limited_history = history if max_rows == 0 else history.head(max_rows)
+    limited_history = limited_history.astype(object).where(limited_history.notna(), None)
     records = limited_history.to_dict(orient="records")
 
     return dump_json(
