@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pandas as pd
 import pytest
+from yfinance.exceptions import YFDataException
 from yfinance.exceptions import YFInvalidPeriodError
 from yfinance.exceptions import YFPricesMissingError
 from yfinance.exceptions import YFRateLimitError
@@ -17,8 +18,10 @@ from yfinance.exceptions import YFTzMissingError
 from yfmcp.server import _build_financials_response
 from yfmcp.server import _industry_key
 from yfmcp.server import _sector_key
+from yfmcp.server import get_analyst_estimates
 from yfmcp.server import get_analyst_price_targets
 from yfmcp.server import get_financials
+from yfmcp.server import get_fund_data
 from yfmcp.server import get_holders
 from yfmcp.server import get_option_chain
 from yfmcp.server import get_option_dates
@@ -118,6 +121,217 @@ async def test_get_analyst_price_targets_api_error(mock_to_thread: AsyncMock, mo
 
     assert data["error_code"] == "API_ERROR"
     assert data["details"] == {"symbol": "AAPL", "exception": "fetch failed"}
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_analyst_estimates_success(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test selected analyst estimate sections return records and per-section metadata."""
+    ticker = mock_ticker.return_value
+    ticker.recommendations = pd.DataFrame(
+        {
+            "period": ["0m", "-1m"],
+            "strongBuy": [12, 10],
+            "buy": [20, 19],
+            "hold": [8, 9],
+            "sell": [1, 1],
+            "strongSell": [0, 0],
+        }
+    )
+    ticker.eps_revisions = pd.DataFrame(
+        {
+            "upLast7days": [2.0, float("nan")],
+            "upLast30days": [4, 3],
+            "downLast30days": [1, 2],
+            "downLast7Days": [0, 1],
+        },
+        index=["0q", "+1q"],
+    )
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_analyst_estimates("AAPL", sections=["eps_revisions", "recommendations"], max_rows=1)
+    data = json.loads(result, parse_constant=lambda value: pytest.fail(f"Invalid JSON constant: {value}"))
+
+    assert data["eps_revisions"] == [
+        {"period": "0q", "upLast7days": 2.0, "upLast30days": 4, "downLast30days": 1, "downLast7Days": 0}
+    ]
+    assert data["recommendations"][0]["period"] == "0m"
+    assert data["_metadata"]["sections"]["eps_revisions"] == {
+        "total_rows": 2,
+        "returned_rows": 1,
+        "truncated": True,
+    }
+    assert data["_metadata"]["failed_sections"] == []
+    assert data["_metadata"]["unavailable_sections"] == []
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_analyst_estimates_partial_failure(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test one failing section does not discard other analyst data."""
+
+    class PartialAnalystTicker:
+        recommendations = pd.DataFrame({"period": ["0m"], "buy": [20]})
+
+        @property
+        def eps_trend(self):
+            raise RuntimeError("trend unavailable")
+
+    mock_ticker.return_value = PartialAnalystTicker()
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_analyst_estimates("AAPL", sections=["recommendations", "eps_trend"])
+    data = json.loads(result)
+
+    assert data["recommendations"] == [{"period": "0m", "buy": 20}]
+    assert data["_metadata"]["failed_sections"] == ["eps_trend"]
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_analyst_estimates_no_data(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test an empty requested analyst section returns a structured no-data response."""
+    mock_ticker.return_value.recommendations = pd.DataFrame()
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_analyst_estimates("NOANALYSTS", sections=["recommendations"])
+    data = json.loads(result)
+
+    assert data["error_code"] == "NO_DATA"
+    assert data["details"] == {"symbol": "NOANALYSTS", "requested_sections": ["recommendations"]}
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_analyst_estimates_network_error(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test a retryable section failure returns a structured network error when no data succeeds."""
+    type(mock_ticker.return_value).eps_trend = PropertyMock(side_effect=TimeoutError("timed out"))
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_analyst_estimates("AAPL", sections=["eps_trend"])
+    data = json.loads(result)
+
+    assert data["error_code"] == "NETWORK_ERROR"
+    assert data["details"]["failed_sections"] == ["eps_trend"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("sections", "max_rows", "detail_key"),
+    [([], 12, "sections"), (["not_a_section"], 12, "invalid_sections"), (None, -1, "max_rows")],
+)
+async def test_get_analyst_estimates_rejects_invalid_parameters(
+    sections: list[str] | None,
+    max_rows: int,
+    detail_key: str,
+) -> None:
+    """Test analyst section selection and row limits are validated before fetching."""
+    result = await get_analyst_estimates("AAPL", sections=sections, max_rows=max_rows)
+    data = json.loads(result)
+
+    assert data["error_code"] == "INVALID_PARAMS"
+    assert detail_key in data["details"]
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_fund_data_success(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test fund exposures and limited holdings are returned with strict JSON values."""
+    funds_data = MagicMock()
+    funds_data.asset_classes = {"stockPosition": 0.995, "otherPosition": float("nan")}
+    funds_data.top_holdings = pd.DataFrame(
+        {"Name": ["Apple Inc.", "Microsoft Corp."], "Holding Percent": [0.07, 0.06]},
+        index=pd.Index(["AAPL", "MSFT"], name="Symbol"),
+    )
+    mock_ticker.return_value.funds_data = funds_data
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_fund_data("SPY", sections=["asset_classes", "top_holdings"], max_rows=1)
+    data = json.loads(result, parse_constant=lambda value: pytest.fail(f"Invalid JSON constant: {value}"))
+
+    assert data["asset_classes"] == {"stockPosition": 0.995, "otherPosition": None}
+    assert data["top_holdings"] == [{"Symbol": "AAPL", "Name": "Apple Inc.", "Holding Percent": 0.07}]
+    assert data["_metadata"]["sections"]["top_holdings"] == {
+        "total_rows": 2,
+        "returned_rows": 1,
+        "truncated": True,
+    }
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_fund_data_partial_failure(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test one failing fund section does not discard other fund data."""
+
+    class PartialFundsData:
+        asset_classes = {"stockPosition": 1.0}
+
+        @property
+        def top_holdings(self):
+            raise RuntimeError("holdings unavailable")
+
+    mock_ticker.return_value.funds_data = PartialFundsData()
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_fund_data("SPY", sections=["asset_classes", "top_holdings"])
+    data = json.loads(result)
+
+    assert data["asset_classes"] == {"stockPosition": 1.0}
+    assert data["_metadata"]["failed_sections"] == ["top_holdings"]
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_fund_data_network_error(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test retryable fund-data failures return structured network errors."""
+    mock_ticker.side_effect = TimeoutError("timed out")
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_fund_data("SPY")
+    data = json.loads(result)
+
+    assert data["error_code"] == "NETWORK_ERROR"
+    assert data["details"]["symbol"] == "SPY"
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_fund_data_non_fund_returns_no_data(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test equities without fund data produce a structured no-data response."""
+    type(mock_ticker.return_value).funds_data = PropertyMock(side_effect=YFDataException("No Fund data found"))
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_fund_data("AAPL")
+    data = json.loads(result)
+
+    assert data["error_code"] == "NO_DATA"
+    assert data["details"]["symbol"] == "AAPL"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("sections", "max_rows", "detail_key"),
+    [([], 25, "sections"), (["not_a_section"], 25, "invalid_sections"), (None, -1, "max_rows")],
+)
+async def test_get_fund_data_rejects_invalid_parameters(
+    sections: list[str] | None,
+    max_rows: int,
+    detail_key: str,
+) -> None:
+    """Test fund section selection and row limits are validated before fetching."""
+    result = await get_fund_data("SPY", sections=sections, max_rows=max_rows)
+    data = json.loads(result)
+
+    assert data["error_code"] == "INVALID_PARAMS"
+    assert detail_key in data["details"]
 
 
 def _upgrades_downgrades_df() -> pd.DataFrame:
@@ -1832,11 +2046,49 @@ async def test_screen_custom_equity_success(mock_to_thread: AsyncMock) -> None:
 
 @pytest.mark.asyncio
 @patch("yfmcp.server.asyncio.to_thread")
+async def test_screen_custom_etf_success(mock_to_thread: AsyncMock) -> None:
+    """Test custom ETF screener query execution."""
+    mock_to_thread.return_value = {"quotes": [{"symbol": "VTI"}], "total": 1}
+    query = {
+        "operator": "and",
+        "operands": [
+            {"operator": "eq", "operands": ["categoryname", "Large Blend"]},
+            {"operator": "lte", "operands": ["annualreportnetexpenseratio", 0.2]},
+        ],
+    }
+
+    result = await screen(query, query_type="etf", size=20, sort_field="fundnetassets", sort_asc=False)
+    data = json.loads(result)
+
+    assert data["quotes"] == [{"symbol": "VTI"}]
+    mock_to_thread.assert_called_once()
+    _, kwargs = mock_to_thread.call_args
+    assert kwargs["size"] == 20
+    assert kwargs["count"] is None
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.asyncio.to_thread")
 async def test_screen_custom_rejects_count_parameter(mock_to_thread: AsyncMock) -> None:
     """Test custom screeners reject the predefined-query count parameter."""
     query = {"operator": "eq", "operands": ["region", "us"]}
 
     result = await screen(query, query_type="equity", count=10)
+    data = json.loads(result)
+
+    assert data["error_code"] == "INVALID_PARAMS"
+    assert data["details"]["invalid_parameter"] == "count"
+    assert data["details"]["expected_parameter"] == "size"
+    mock_to_thread.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_screen_custom_etf_rejects_count_parameter(mock_to_thread: AsyncMock) -> None:
+    """Test custom ETF screeners reject the predefined-query count parameter."""
+    query = {"operator": "eq", "operands": ["categoryname", "Large Blend"]}
+
+    result = await screen(query, query_type="etf", count=10)
     data = json.loads(result)
 
     assert data["error_code"] == "INVALID_PARAMS"
