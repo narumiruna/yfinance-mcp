@@ -16,7 +16,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that p
 ## Features
 
 - **Stock Data** — Company info, financials, valuation metrics, dividends, and trading data
-- **Analyst Price Targets** — Current price and analyst low, high, mean, and median targets
+- **Analyst Data** — Consensus price targets and firm-level rating and price-target changes
 - **Financial Statements** — Income statement and balance sheet with historical data (EBIT, Invested Capital, etc.)
 - **Financial News** — Recent news articles and press releases for any ticker
 - **Search** — Find stocks, ETFs, and news across Yahoo Finance
@@ -47,6 +47,26 @@ Fetch the current price and analyst consensus price targets for a stock.
 | `symbol` | string | Yes | Stock ticker symbol (e.g. `AAPL`, `GOOGL`, `MSFT`) |
 
 **Returns:** JSON object with `current`, `low`, `high`, `mean`, and `median` price fields. Analyst coverage and available fields vary by symbol.
+
+### `yfinance_get_upgrades_downgrades`
+
+Fetch analyst upgrades, downgrades, initiations, reiterations, and price-target changes, newest first.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `symbol` | string | Yes | Stock ticker symbol |
+| `max_rows` | number | No | Maximum actions to return. Default: `25`. Use `0` to return all rows |
+
+**Returns:** JSON object containing `upgrades_downgrades` records and `_metadata` with row counts and truncation status. Records can include:
+
+- `GradeDate`: Date and time of the analyst action
+- `Firm`: Analyst firm name
+- `ToGrade` and `FromGrade`: New and previous ratings
+- `Action`: Rating action
+- `priceTargetAction`: Price-target action such as `Raises`, `Lowers`, or `Maintains`
+- `currentPriceTarget` and `priorPriceTarget`: New and previous price targets
+
+Available fields vary by symbol and analyst action.
 
 ### `yfinance_get_ticker_news`
 

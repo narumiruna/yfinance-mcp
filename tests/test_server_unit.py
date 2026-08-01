@@ -28,6 +28,7 @@ from yfmcp.server import get_top_etfs
 from yfmcp.server import get_top_growth_companies
 from yfmcp.server import get_top_mutual_funds
 from yfmcp.server import get_top_performing_companies
+from yfmcp.server import get_upgrades_downgrades
 from yfmcp.server import screen
 from yfmcp.server import screen_gappers
 
@@ -113,6 +114,133 @@ async def test_get_analyst_price_targets_api_error(mock_to_thread: AsyncMock, mo
     mock_to_thread.side_effect = _run_to_thread
 
     result = await get_analyst_price_targets("AAPL")
+    data = json.loads(result)
+
+    assert data["error_code"] == "API_ERROR"
+    assert data["details"] == {"symbol": "AAPL", "exception": "fetch failed"}
+
+
+def _upgrades_downgrades_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Firm": ["Firm B", "Firm A"],
+            "ToGrade": ["Hold", "Buy"],
+            "FromGrade": ["Buy", "Hold"],
+            "Action": ["down", "up"],
+            "priceTargetAction": ["Lowers", "Raises"],
+            "currentPriceTarget": [200.0, 250.0],
+            "priorPriceTarget": [220.0, 225.0],
+        },
+        index=pd.DatetimeIndex(["2026-07-28 16:00:00", "2026-07-29 18:31:40"], name="GradeDate"),
+    )
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_upgrades_downgrades_success(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test analyst rating history includes firm-level price target changes and metadata."""
+    mock_ticker.return_value.upgrades_downgrades = _upgrades_downgrades_df()
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_upgrades_downgrades("AAPL", max_rows=1)
+    data = json.loads(result)
+
+    assert data["upgrades_downgrades"] == [
+        {
+            "GradeDate": "2026-07-29 18:31:40",
+            "Firm": "Firm A",
+            "ToGrade": "Buy",
+            "FromGrade": "Hold",
+            "Action": "up",
+            "priceTargetAction": "Raises",
+            "currentPriceTarget": 250.0,
+            "priorPriceTarget": 225.0,
+        }
+    ]
+    assert data["_metadata"] == {
+        "symbol": "AAPL",
+        "max_rows": 1,
+        "total_rows": 2,
+        "returned_rows": 1,
+        "truncated": True,
+    }
+    mock_ticker.assert_called_once_with("AAPL")
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_upgrades_downgrades_max_rows_zero_returns_all_rows(
+    mock_to_thread: AsyncMock, mock_ticker: MagicMock
+) -> None:
+    """Test max_rows=0 returns the complete analyst action history."""
+    mock_ticker.return_value.upgrades_downgrades = _upgrades_downgrades_df()
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_upgrades_downgrades("AAPL", max_rows=0)
+    data = json.loads(result)
+
+    assert len(data["upgrades_downgrades"]) == 2
+    assert data["_metadata"]["returned_rows"] == 2
+    assert data["_metadata"]["truncated"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_upgrades_downgrades_rejects_negative_max_rows() -> None:
+    """Test a negative row limit returns a structured parameter error."""
+    result = await get_upgrades_downgrades("AAPL", max_rows=-1)
+    data = json.loads(result)
+
+    assert data["error_code"] == "INVALID_PARAMS"
+    assert data["details"] == {"max_rows": -1}
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_upgrades_downgrades_no_data(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test missing analyst rating history returns a structured no-data response."""
+    mock_ticker.return_value.upgrades_downgrades = pd.DataFrame()
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_upgrades_downgrades("NOANALYSTS")
+    data = json.loads(result)
+
+    assert data["error_code"] == "NO_DATA"
+    assert data["details"]["symbol"] == "NOANALYSTS"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exception", [TimeoutError("timed out"), OSError("network unreachable"), YFRateLimitError()])
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_upgrades_downgrades_network_error(
+    mock_to_thread: AsyncMock,
+    mock_ticker: MagicMock,
+    exception: Exception,
+) -> None:
+    """Test retryable analyst rating failures return structured network errors."""
+    type(mock_ticker.return_value).upgrades_downgrades = PropertyMock(side_effect=exception)
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_upgrades_downgrades("AAPL")
+    data = json.loads(result)
+
+    assert data["error_code"] == "NETWORK_ERROR"
+    assert data["error"] == _expected_retryable_error("fetching upgrades and downgrades for 'AAPL'", exception)
+    assert data["details"]["symbol"] == "AAPL"
+
+
+@pytest.mark.asyncio
+@patch("yfmcp.server.yf.Ticker")
+@patch("yfmcp.server.asyncio.to_thread")
+async def test_get_upgrades_downgrades_api_error(mock_to_thread: AsyncMock, mock_ticker: MagicMock) -> None:
+    """Test unexpected analyst rating failures return structured API errors."""
+    type(mock_ticker.return_value).upgrades_downgrades = PropertyMock(side_effect=RuntimeError("fetch failed"))
+    mock_to_thread.side_effect = _run_to_thread
+
+    result = await get_upgrades_downgrades("AAPL")
     data = json.loads(result)
 
     assert data["error_code"] == "API_ERROR"

@@ -334,6 +334,83 @@ async def get_analyst_price_targets(
 
 
 @mcp.tool(
+    name="yfinance_get_upgrades_downgrades",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
+async def get_upgrades_downgrades(
+    symbol: Annotated[str, Field(description="Stock ticker symbol (e.g., 'AAPL', 'GOOGL', 'MSFT')")],
+    max_rows: Annotated[
+        int,
+        Field(description="Maximum analyst actions to return, newest first. Use 0 to return all rows."),
+    ] = 25,
+) -> str:
+    """Fetch analyst upgrades, downgrades, initiations, and price target changes.
+
+    Returns analyst actions newest first. Fields supplied by Yahoo Finance can include:
+    - GradeDate: Date and time of the analyst action
+    - Firm: Analyst firm name
+    - ToGrade and FromGrade: New and previous ratings
+    - Action: Rating action, such as upgrade, downgrade, initiation, or reiteration
+    - priceTargetAction: Price target action, such as Raises, Lowers, or Maintains
+    - currentPriceTarget and priorPriceTarget: New and previous price targets
+
+    Available fields vary by symbol and analyst action.
+    """
+    if max_rows < 0:
+        return create_error_response(
+            "max_rows must be greater than or equal to 0.",
+            error_code="INVALID_PARAMS",
+            details={"max_rows": max_rows},
+        )
+
+    try:
+        ticker = await asyncio.to_thread(yf.Ticker, symbol)
+        history = await asyncio.to_thread(lambda: ticker.upgrades_downgrades)
+    except _RETRYABLE_YFINANCE_EXCEPTIONS as exc:
+        return _create_retryable_error_response(
+            f"fetching upgrades and downgrades for '{symbol}'",
+            exc,
+            {"symbol": symbol},
+        )
+    except Exception as exc:
+        return create_error_response(
+            f"Failed to fetch upgrades and downgrades for '{symbol}'. Verify the symbol is correct.",
+            error_code="API_ERROR",
+            details={"symbol": symbol, "exception": str(exc)},
+        )
+
+    if history is None or history.empty:
+        return create_error_response(
+            f"No upgrades or downgrades available for '{symbol}'.",
+            error_code="NO_DATA",
+            details={"symbol": symbol},
+        )
+
+    history = history.sort_index(ascending=False).reset_index()
+    total_rows = len(history)
+    limited_history = history if max_rows == 0 else history.head(max_rows)
+    records = limited_history.to_dict(orient="records")
+
+    return dump_json(
+        {
+            "upgrades_downgrades": records,
+            "_metadata": {
+                "symbol": symbol,
+                "max_rows": max_rows,
+                "total_rows": total_rows,
+                "returned_rows": len(records),
+                "truncated": len(records) < total_rows,
+            },
+        }
+    )
+
+
+@mcp.tool(
     name="yfinance_get_ticker_news",
     annotations=ToolAnnotations(
         readOnlyHint=True,
