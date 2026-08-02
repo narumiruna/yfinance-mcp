@@ -330,7 +330,19 @@ async def get_analyst_price_targets(
             details={"symbol": symbol},
         )
 
-    return dump_json(targets)
+    cleaned_targets: dict[str, Any] = {}
+    for key, value in targets.items():
+        if value is None:
+            cleaned_targets[key] = None
+            continue
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            cleaned_targets[key] = value
+            continue
+        cleaned_targets[key] = None if numeric != numeric else numeric
+
+    return dump_json(cleaned_targets)
 
 
 @mcp.tool(
