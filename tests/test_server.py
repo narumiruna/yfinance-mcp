@@ -25,6 +25,8 @@ async def test_list_tools(server_params: StdioServerParameters) -> None:
 
         result = await session.list_tools()
         assert len(result.tools) > 0
+        assert "yfinance_get_analyst_price_targets" in {tool.name for tool in result.tools}
+        assert "yfinance_get_upgrades_downgrades" in {tool.name for tool in result.tools}
 
 
 @pytest.mark.asyncio
