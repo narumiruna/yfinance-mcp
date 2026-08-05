@@ -191,7 +191,7 @@ def _normalize_json_value(value: Any) -> Any:
     """Replace non-finite numeric values recursively so responses remain strict JSON."""
     if isinstance(value, dict):
         return {key: _normalize_json_value(item) for key, item in value.items()}
-    if isinstance(value, list | tuple):
+    if isinstance(value, (list, tuple)):
         return [_normalize_json_value(item) for item in value]
     if isinstance(value, Real) and not math.isfinite(float(value)):
         return None
@@ -228,7 +228,7 @@ def _dataframe_records(
 def _serialize_fund_section(value: Any, max_rows: int) -> tuple[Any, dict[str, Any] | None] | None:
     if value is None or (hasattr(value, "empty") and value.empty):
         return None
-    if isinstance(value, dict | list | str) and not value:
+    if isinstance(value, (dict, list, str)) and not value:
         return None
     if hasattr(value, "columns") and hasattr(value, "index"):
         records, metadata = _dataframe_records(value, max_rows, include_index=True)
