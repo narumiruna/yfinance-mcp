@@ -83,6 +83,7 @@ ScreenerQueryType = Literal[
     "predefined",
     "equity",
     "fund",
+    "etf",
 ]
 
 OptionChainType = Literal[

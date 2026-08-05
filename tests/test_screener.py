@@ -1,5 +1,6 @@
 import pytest
 from yfinance import EquityQuery
+from yfinance import ETFQuery
 from yfinance import FundQuery
 
 from yfmcp.screener import build_screener_query
@@ -38,6 +39,22 @@ def test_build_fund_query_success() -> None:
     assert result.operator == "AND"
 
 
+def test_build_etf_query_success() -> None:
+    """Test JSON-style ETF query trees build yfinance ETFQuery objects."""
+    query = {
+        "operator": "and",
+        "operands": [
+            {"operator": "eq", "operands": ["categoryname", "Large Blend"]},
+            {"operator": "lte", "operands": ["annualreportnetexpenseratio", 0.2]},
+        ],
+    }
+
+    result = build_screener_query("etf", query)
+
+    assert isinstance(result, ETFQuery)
+    assert result.operator == "AND"
+
+
 def test_build_query_invalid_operator() -> None:
     """Test unsupported operators are rejected."""
     query = {"operator": "contains", "operands": ["region", "us"]}
@@ -47,8 +64,8 @@ def test_build_query_invalid_operator() -> None:
 
 
 def test_build_query_invalid_type() -> None:
-    """Test custom query builder only accepts equity and fund query types."""
+    """Test custom query builder only accepts equity, fund, and ETF query types."""
     query = {"operator": "eq", "operands": ["region", "us"]}
 
-    with pytest.raises(ValueError, match="query_type must be 'equity' or 'fund'"):
+    with pytest.raises(ValueError, match="query_type must be 'equity', 'fund', or 'etf'"):
         build_screener_query("predefined", query)

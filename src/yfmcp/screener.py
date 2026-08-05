@@ -4,10 +4,11 @@ from typing import Any
 from typing import cast
 
 from yfinance import EquityQuery
+from yfinance import ETFQuery
 from yfinance import FundQuery
 from yfinance.screener.query import Operator
 
-ScreenerQuery = EquityQuery | FundQuery
+ScreenerQuery = EquityQuery | FundQuery | ETFQuery
 
 LEAF_OPERATORS = {"eq", "is-in", "btwn", "gt", "lt", "gte", "lte"}
 LOGICAL_OPERATORS = {"and", "or"}
@@ -20,8 +21,10 @@ def build_screener_query(query_type: str, query: dict[str, Any]) -> ScreenerQuer
             return _build_equity_node(query)
         case "fund":
             return _build_fund_node(query)
+        case "etf":
+            return _build_etf_node(query)
         case _:
-            raise ValueError("query_type must be 'equity' or 'fund' for custom queries")
+            raise ValueError("query_type must be 'equity', 'fund', or 'etf' for custom queries")
 
 
 def _validate_node_shape(node: dict[str, Any]) -> tuple[Operator, list[Any]]:
@@ -77,4 +80,22 @@ def _build_fund_node(node: dict[str, Any]) -> FundQuery:
         if any(isinstance(operand, dict) for operand in operands):
             raise ValueError(f"Operator '{normalized_operator.upper()}' does not accept nested query objects")
         return FundQuery(normalized_operator, operands)
+    raise ValueError(f"Unsupported operator '{normalized_operator.upper()}'")
+
+
+def _build_etf_node(node: dict[str, Any]) -> ETFQuery:
+    normalized_operator, operands = _validate_node_shape(node)
+
+    if normalized_operator in LOGICAL_OPERATORS:
+        nested_queries: list[ETFQuery] = []
+        for operand in operands:
+            if not isinstance(operand, dict):
+                raise ValueError(f"Operator '{normalized_operator.upper()}' requires nested query objects")
+            nested_queries.append(_build_etf_node(cast(dict[str, Any], operand)))
+        return ETFQuery(normalized_operator, cast(Any, nested_queries))
+
+    if normalized_operator in LEAF_OPERATORS:
+        if any(isinstance(operand, dict) for operand in operands):
+            raise ValueError(f"Operator '{normalized_operator.upper()}' does not accept nested query objects")
+        return ETFQuery(normalized_operator, operands)
     raise ValueError(f"Unsupported operator '{normalized_operator.upper()}'")
