@@ -7,6 +7,8 @@ import asyncio
 import base64
 import json
 import sys
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +60,96 @@ FUND_SECTIONS = [
     "bond_ratings",
     "sector_weightings",
 ]
+
+TOOL_GUIDANCE: dict[str, tuple[str, str, str]] = {
+    "yfinance_get_ticker_info": (
+        "Company research",
+        "Company snapshot",
+        "Start here to understand what a company does, how it trades, and how it is valued.",
+    ),
+    "yfinance_get_analyst_price_targets": (
+        "Company research",
+        "Analyst price targets",
+        "Compare the current price with the analyst consensus range and median target.",
+    ),
+    "yfinance_get_analyst_estimates": (
+        "Company research",
+        "Analyst estimates and trends",
+        "See consensus earnings, revenue expectations, EPS revisions, recommendations, and growth estimates.",
+    ),
+    "yfinance_get_upgrades_downgrades": (
+        "Company research",
+        "Analyst actions",
+        "Track recent upgrades, downgrades, initiations, reiterations, and target-price changes.",
+    ),
+    "yfinance_get_ticker_news": (
+        "Company research",
+        "Ticker news",
+        "Collect recent company-specific news and press coverage for monitoring or research workflows.",
+    ),
+    "yfinance_get_fund_data": (
+        "Fund research",
+        "ETF or mutual-fund profile",
+        "Inspect a fund's description, holdings, asset mix, expenses, ratings, and sector exposure.",
+    ),
+    "yfinance_search": (
+        "Discovery",
+        "Yahoo Finance search",
+        "Find securities or news when you know a name, theme, or keyword but not the exact ticker.",
+    ),
+    "yfinance_screen": (
+        "Discovery",
+        "Custom or predefined screener",
+        "Turn an investment idea into a repeatable filter for equities, mutual funds, or ETFs.",
+    ),
+    "yfinance_screen_gappers": (
+        "Discovery",
+        "Opening-session gappers",
+        "Find liquid stocks making a large move while enforcing price, volume, market-cap, and region filters.",
+    ),
+    "yfinance_get_top": (
+        "Market context",
+        "Sector rankings",
+        "Compare leading ETFs, funds, companies, growth names, or performers within a sector.",
+    ),
+    "yfinance_get_price_history": (
+        "Market context",
+        "Price history and charts",
+        "Review OHLCV history or create technical-analysis visuals for a security.",
+    ),
+    "yfinance_get_financials": (
+        "Fundamental analysis",
+        "Financial statements",
+        "Analyze revenue, profitability, balance-sheet strength, and cash flow across reporting frequencies.",
+    ),
+    "yfinance_get_holders": (
+        "Fundamental analysis",
+        "Ownership and insider activity",
+        "Understand institutional concentration, mutual-fund ownership, and insider transactions.",
+    ),
+    "yfinance_get_option_dates": (
+        "Options analysis",
+        "Option expiration dates",
+        "Discover the expirations available before requesting a specific option chain.",
+    ),
+    "yfinance_get_option_chain": (
+        "Options analysis",
+        "Option chain",
+        "Inspect calls, puts, strikes, implied volatility, open interest, and liquidity for an expiration.",
+    ),
+}
+
+
+@dataclass
+class CallRecord:
+    number: int
+    tool_name: str
+    arguments: dict[str, Any]
+    result: CallToolResult | None
+    saved_paths: list[Path]
+    summary: str
+    preview: str
+    transport_error: str | None
 
 
 def _demo_calls(symbol: str, fund_symbol: str, sector: str) -> list[tuple[str, dict[str, Any]]]:
@@ -238,6 +330,182 @@ def _preview(text: str, limit: int = 900) -> str:
     return display
 
 
+def _format_number(value: Any) -> str:
+    if isinstance(value, int | float):
+        return f"{value:,.2f}" if isinstance(value, float) else f"{value:,}"
+    return str(value)
+
+
+def _response_summary(tool_name: str, arguments: dict[str, Any], result: CallToolResult | None) -> str:  # noqa: C901
+    if result is None:
+        return "No MCP response was received."
+
+    payload = _json_payload(result)
+    if isinstance(payload, dict) and "error" in payload:
+        error_code = payload.get("error_code", "unknown error")
+        return f"Server returned {error_code}: {payload['error']}"
+
+    if tool_name == "yfinance_get_ticker_info" and isinstance(payload, dict):
+        name = payload.get("longName") or payload.get("shortName") or arguments["symbol"]
+        sector = payload.get("sector")
+        industry = payload.get("industry")
+        price = payload.get("currentPrice") or payload.get("regularMarketPrice")
+        parts = [f"{name} ({arguments['symbol']})"]
+        if sector or industry:
+            parts.append(" / ".join(str(item) for item in (sector, industry) if item))
+        if price is not None:
+            parts.append(f"current price ${_format_number(price)}")
+        if payload.get("marketCap") is not None:
+            parts.append(f"market cap ${_format_number(payload['marketCap'])}")
+        return "; ".join(parts) + "."
+
+    if tool_name == "yfinance_get_analyst_price_targets" and isinstance(payload, dict):
+        current = payload.get("current")
+        low = payload.get("low")
+        high = payload.get("high")
+        mean = payload.get("mean")
+        median = payload.get("median")
+        return (
+            f"Current ${_format_number(current)}; analyst range ${_format_number(low)}–${_format_number(high)}; "
+            f"mean ${_format_number(mean)}, median ${_format_number(median)}."
+        )
+
+    if tool_name in {"yfinance_get_analyst_estimates", "yfinance_get_fund_data"} and isinstance(payload, dict):
+        sections = [key for key in payload if not key.startswith("_")]
+        metadata = payload.get("_metadata", {})
+        section_names = ", ".join(str(section) for section in sections)
+        row_limit = metadata.get("max_rows", "configured")
+        return f"Returned {len(sections)} sections ({section_names}), with a {row_limit} row limit per table."
+
+    if tool_name == "yfinance_get_upgrades_downgrades" and isinstance(payload, dict):
+        rows = payload.get("upgrades_downgrades", [])
+        latest = rows[0] if rows else {}
+        latest_action = ", ".join(
+            str(value) for value in (latest.get("Firm"), latest.get("Action"), latest.get("ToGrade")) if value
+        )
+        suffix = f" Latest: {latest_action}." if latest_action else ""
+        return f"Returned {len(rows)} recent analyst actions.{suffix}"
+
+    if tool_name == "yfinance_get_ticker_news" and isinstance(payload, list):
+        titles = []
+        for item in payload[:3]:
+            content = item.get("content", item) if isinstance(item, dict) else {}
+            if content.get("title"):
+                titles.append(str(content["title"]))
+        latest = f" Latest: {'; '.join(titles)}." if titles else ""
+        return f"Found {len(payload)} recent news items.{latest}"
+
+    if tool_name == "yfinance_search":
+        if isinstance(payload, dict):
+            quotes = payload.get("quotes", [])
+            news = payload.get("news", [])
+            return f"Found {len(quotes)} quote matches and {len(news)} news matches."
+        if isinstance(payload, list):
+            label = "news articles" if arguments.get("search_type") == "news" else "securities"
+            return f"Found {len(payload)} {label} for '{arguments['query']}'."
+
+    if tool_name in {"yfinance_screen", "yfinance_screen_gappers"} and isinstance(payload, dict):
+        quotes = payload.get("quotes", [])
+        total = payload.get("total", len(quotes))
+        symbols = [quote.get("symbol") for quote in quotes[:5] if isinstance(quote, dict) and quote.get("symbol")]
+        match_text = ", ".join(symbols) if symbols else "no symbols in the response preview"
+        return f"Found {total} matching securities; first returned symbols: {match_text}."
+
+    if tool_name == "yfinance_get_top" and isinstance(payload, list):
+        names = []
+        for item in payload[:5]:
+            if not isinstance(item, dict):
+                continue
+            if item.get("symbol") or item.get("name"):
+                names.append(str(item.get("symbol") or item.get("name")))
+            elif item.get("industry"):
+                names.append(str(item["industry"]))
+        return f"Returned {len(payload)} ranked results; examples: {', '.join(names)}."
+
+    if tool_name == "yfinance_get_price_history":
+        if any(isinstance(content, ImageContent) for content in result.content):
+            chart_type = arguments.get("chart_type", "chart")
+            return f"Returned the {chart_type} chart as a WebP image."
+        text = next((content.text for content in result.content if isinstance(content, TextContent)), "")
+        rows = max(len(text.splitlines()) - 3, 0)
+        return f"Returned a Markdown OHLCV table with approximately {rows} data rows."
+
+    if tool_name == "yfinance_get_financials" and isinstance(payload, dict):
+        sections = list(payload)
+        period_count = sum(
+            len(periods)
+            for section in payload.values()
+            if isinstance(section, dict)
+            for periods in section.values()
+            if isinstance(periods, dict)
+        )
+        section_names = ", ".join(str(section) for section in sections)
+        return f"Returned {section_names} for {arguments['frequency']} reporting ({period_count} field-period values)."
+
+    if tool_name == "yfinance_get_option_dates" and isinstance(payload, list):
+        first = payload[0] if payload else "none"
+        last = payload[-1] if payload else "none"
+        return f"Found {len(payload)} available expirations, from {first} through {last}."
+
+    if tool_name == "yfinance_get_option_chain" and isinstance(payload, dict):
+        date_summaries = []
+        for date, data in payload.items():
+            if not isinstance(data, dict):
+                continue
+            calls = len(data.get("calls", []))
+            puts = len(data.get("puts", []))
+            date_summaries.append(f"{date}: {calls} calls, {puts} puts")
+        return f"Returned {len(payload)} expiration(s): {'; '.join(date_summaries)}."
+
+    if tool_name == "yfinance_get_holders" and isinstance(payload, dict):
+        sections = {key: len(value) for key, value in payload.items() if isinstance(value, list)}
+        section_text = ", ".join(f"{key}={count}" for key, count in sections.items())
+        return f"Returned ownership and insider sections ({section_text})."
+
+    if isinstance(payload, dict):
+        return f"Returned a JSON object with: {', '.join(payload.keys())}."
+    if isinstance(payload, list):
+        return f"Returned a JSON list with {len(payload)} items."
+    return "Returned a text response."
+
+
+def _call_title(tool_name: str, arguments: dict[str, Any]) -> str:
+    title = TOOL_GUIDANCE[tool_name][1]
+    if tool_name == "yfinance_search":
+        return f"{title} ({arguments['search_type']})"
+    if tool_name == "yfinance_screen":
+        return f"{title} ({arguments['query_type']})"
+    if tool_name == "yfinance_get_top":
+        return f"{title} ({arguments['top_type']})"
+    if tool_name == "yfinance_get_price_history":
+        mode = arguments.get("chart_type", "table")
+        return f"{title} ({mode})"
+    if tool_name == "yfinance_get_financials":
+        return f"{title} ({arguments['frequency']})"
+    if tool_name == "yfinance_get_option_chain":
+        return f"{title} ({arguments['option_type']})"
+    return title
+
+
+def _variant_label(tool_name: str, arguments: dict[str, Any]) -> str:
+    if tool_name == "yfinance_search":
+        return f"{arguments['search_type']}"
+    if tool_name == "yfinance_screen":
+        return f"{arguments['query_type']}"
+    if tool_name == "yfinance_screen_gappers":
+        return "gappers"
+    if tool_name in {"yfinance_get_top", "yfinance_get_financials", "yfinance_get_option_chain"}:
+        key = {
+            "yfinance_get_top": "top_type",
+            "yfinance_get_financials": "frequency",
+            "yfinance_get_option_chain": "option_type",
+        }[tool_name]
+        return str(arguments[key])
+    if tool_name == "yfinance_get_price_history":
+        return str(arguments.get("chart_type", "table"))
+    return "default"
+
+
 def _save_result(result: CallToolResult, output_dir: Path, call_number: int, tool_name: str) -> list[Path]:
     saved_paths: list[Path] = []
     for content_number, content in enumerate(result.content, start=1):
@@ -259,35 +527,155 @@ async def _call_tool(
     session: ClientSession,
     output_dir: Path,
     call_number: int,
+    total_calls: int,
     tool_name: str,
     arguments: dict[str, Any],
-) -> CallToolResult | None:
-    print(f"\n[{call_number}] {tool_name}")
+) -> CallRecord:
+    print(f"\n[{call_number}/{total_calls}] {_call_title(tool_name, arguments)}")
+    print(f"MCP tool: {tool_name}")
     print(f"arguments: {json.dumps(arguments, sort_keys=True)}")
     try:
         result = await session.call_tool(tool_name, arguments=arguments)
     except Exception as exc:
         print(f"transport error: {exc}", file=sys.stderr)
-        return None
+        return CallRecord(
+            number=call_number,
+            tool_name=tool_name,
+            arguments=arguments,
+            result=None,
+            saved_paths=[],
+            summary=f"Transport error: {exc}",
+            preview="",
+            transport_error=str(exc),
+        )
 
     saved_paths = _save_result(result, output_dir, call_number, tool_name)
-    if result.isError:
-        print("server returned an MCP error result")
-    for content in result.content:
-        if isinstance(content, TextContent):
-            print(_preview(content.text))
-        elif isinstance(content, ImageContent):
-            print(f"returned {content.mimeType} image")
+    summary = _response_summary(tool_name, arguments, result)
+    preview = "\n".join(_preview(content.text) for content in result.content if isinstance(content, TextContent))
+    print(f"result: {summary}")
     for path in saved_paths:
-        print(f"saved: {path}")
-    return result
+        print(f"artifact: {path}")
+    return CallRecord(
+        number=call_number,
+        tool_name=tool_name,
+        arguments=arguments,
+        result=result,
+        saved_paths=saved_paths,
+        summary=summary,
+        preview=preview,
+        transport_error=None,
+    )
 
 
-def _first_option_date(result: CallToolResult | None) -> str | None:
-    payload = _json_payload(result)
+def _first_option_date(record: CallRecord | None) -> str | None:
+    payload = _json_payload(record.result if record is not None else None)
     if isinstance(payload, list) and payload and isinstance(payload[0], str):
         return payload[0]
     return None
+
+
+def _markdown_artifact_link(path: Path) -> str:
+    return f"[{path.name}]({path.name})"
+
+
+def _render_report(
+    records: list[CallRecord],
+    available_tools: set[str],
+    output_dir: Path,
+    args: argparse.Namespace,
+) -> Path:
+    report_path = output_dir / "demo-report.md"
+    failures = [record for record in records if record.transport_error]
+    tool_order = list(dict.fromkeys(record.tool_name for record in records))
+    coverage_rows = []
+    for tool_name in tool_order:
+        tool_records = [record for record in records if record.tool_name == tool_name]
+        variants = ", ".join(dict.fromkeys(_variant_label(tool_name, record.arguments) for record in tool_records))
+        purpose = TOOL_GUIDANCE[tool_name][2]
+        coverage_rows.append(f"| `{tool_name}` | {len(tool_records)} | {variants} | {purpose} |")
+
+    groups: dict[str, list[CallRecord]] = {}
+    for record in records:
+        group = TOOL_GUIDANCE[record.tool_name][0]
+        groups.setdefault(group, []).append(record)
+
+    lines = [
+        "# yfinance-mcp Feature Demo Report",
+        "",
+        f"Generated: {datetime.now().astimezone().isoformat(timespec='seconds')}",
+        "",
+        "## What this demonstrates",
+        "",
+        (
+            "This is a real MCP client session. The demo never imports yfinance or yfinance-mcp internals; "
+            "it asks the MCP server for data and presents the results in user-facing research workflows."
+        ),
+        "",
+        (
+            "Use this report to answer: **What can I ask yfinance-mcp to do, what arguments do I provide, "
+            "and what comes back?**"
+        ),
+        "",
+        "- **Research a company:** understand the business, valuation, analyst expectations, news, and ownership.",
+        "- **Research funds:** inspect holdings, exposures, expenses, and fund characteristics.",
+        "- **Discover opportunities:** search Yahoo Finance, run repeatable screeners, and find sector leaders.",
+        "- **Analyze markets:** retrieve OHLCV history, technical charts, financial statements, and options data.",
+        "",
+        "## Run context",
+        "",
+        f"- Stock symbol: `{args.symbol}`",
+        f"- Fund symbol: `{args.fund_symbol}`",
+        f"- Sector: `{args.sector}`",
+        f"- MCP server command: `{args.server_command}`",
+        f"- Server tools advertised: **{len(available_tools)}**",
+        f"- Calls completed: **{len(records)}**",
+        f"- Transport failures: **{len(failures)}**",
+        "",
+        "## Coverage at a glance",
+        "",
+        (
+            "Every public tool is represented below. Variants show the arguments that make the same tool useful "
+            "for different jobs."
+        ),
+        "",
+        "| MCP tool | Calls | Variants exercised | Why you would use it |",
+        "|---|---:|---|---|",
+        *coverage_rows,
+        "",
+    ]
+
+    for group, group_records in groups.items():
+        lines.extend([f"## {group}", ""])
+        for record in group_records:
+            _, _, why = TOOL_GUIDANCE[record.tool_name]
+            lines.extend(
+                [
+                    f"### {record.number}. {_call_title(record.tool_name, record.arguments)}",
+                    "",
+                    f"**MCP tool:** `{record.tool_name}`  ",
+                    f"**Why it matters:** {why}",
+                    "",
+                    "**Arguments used**",
+                    "",
+                    "```json",
+                    json.dumps(record.arguments, indent=2, ensure_ascii=False),
+                    "```",
+                    "",
+                    f"**What came back:** {record.summary}",
+                    "",
+                ]
+            )
+            if record.preview:
+                excerpt = record.preview.replace("```", "`` `")
+                lines.extend(["**Response excerpt**", "", "```text", excerpt, "```", ""])
+            if record.saved_paths:
+                artifact_links = ", ".join(_markdown_artifact_link(path) for path in record.saved_paths)
+                lines.extend([f"**Complete artifact:** {artifact_links}", ""])
+            if record.transport_error:
+                lines.extend([f"**Transport error:** `{record.transport_error}`", ""])
+
+    report_path.write_text("\n".join(lines), encoding="utf-8")
+    return report_path
 
 
 def _print_dry_run(args: argparse.Namespace) -> None:
@@ -313,7 +701,10 @@ async def _run_demo(args: argparse.Namespace) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     server_parameters = _server_parameters(args)
     calls = _demo_calls(args.symbol, args.fund_symbol, args.sector)
+    total_calls = len(calls) + 3
     failures = 0
+    records: list[CallRecord] = []
+    available_tools: set[str] = set()
 
     async with (
         stdio_client(server_parameters) as (read, write),
@@ -327,32 +718,37 @@ async def _run_demo(args: argparse.Namespace) -> int:
             print(f"MCP server is missing expected tools: {', '.join(missing_tools)}", file=sys.stderr)
             return 1
         print(f"Connected to yfinance-mcp with {len(available_tools)} tools.")
-        print(f"Complete responses will be saved in {output_dir}")
+        print(f"A readable report and complete artifacts will be saved in {output_dir}")
 
-        option_dates_result: CallToolResult | None = None
+        option_dates_record: CallRecord | None = None
         for call_number, (tool_name, arguments) in enumerate(calls, start=1):
-            result = await _call_tool(session, output_dir, call_number, tool_name, arguments)
-            if result is None:
+            record = await _call_tool(session, output_dir, call_number, total_calls, tool_name, arguments)
+            records.append(record)
+            if record.transport_error:
                 failures += 1
             if tool_name == "yfinance_get_option_dates":
-                option_dates_result = result
+                option_dates_record = record
 
-        expiration_date = _first_option_date(option_dates_result)
+        expiration_date = _first_option_date(option_dates_record)
         for offset, option_type in enumerate(("all", "calls", "puts"), start=1):
             chain_arguments: dict[str, Any] = {"symbol": args.symbol, "option_type": option_type}
             if expiration_date is not None:
                 chain_arguments["expiration_date"] = expiration_date
-            result = await _call_tool(
+            record = await _call_tool(
                 session,
                 output_dir,
                 len(calls) + offset,
+                total_calls,
                 "yfinance_get_option_chain",
                 chain_arguments,
             )
-            if result is None:
+            records.append(record)
+            if record.transport_error:
                 failures += 1
 
-    print(f"\nDemo finished with {failures} transport failure(s).")
+    report_path = _render_report(records, available_tools, output_dir, args)
+    print(f"\nReport: {report_path}")
+    print(f"Demo finished with {failures} transport failure(s).")
     return 1 if failures else 0
 
 
