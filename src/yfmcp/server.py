@@ -1,5 +1,6 @@
 import asyncio
 import math
+import re
 from datetime import datetime
 from numbers import Real
 from typing import Annotated
@@ -788,6 +789,12 @@ async def get_ticker_news(
 
     Use this to track company announcements, market sentiment, and breaking news.
     """
+    if re.fullmatch(r"[A-Za-z0-9.\-^=&_]+", symbol) is None:
+        return create_error_response(
+            "Invalid symbol. Use only ASCII letters, digits, and . - ^ = & _; the symbol must not be empty.",
+            error_code="INVALID_PARAMS",
+        )
+
     try:
         ticker = await asyncio.to_thread(yf.Ticker, symbol)
         news = await asyncio.to_thread(ticker.get_news)

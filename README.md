@@ -86,6 +86,11 @@ Fetch recent news articles and press releases for a specific stock.
 |-----------|------|----------|-------------|
 | `symbol` | string | Yes | Stock ticker symbol |
 
+`symbol` must be nonempty and contain only ASCII letters, digits, or `.`, `-`, `^`, `=`, `&`, `_`.
+Invalid input returns `INVALID_PARAMS` without echoing the input or calling Yahoo Finance.
+Accepted formats include `BRK.B`, `2330.TW`, `^GSPC`, `EURUSD=X`, `ES=F`, and `BTC-USD`.
+This format check does not verify that a ticker exists.
+
 **Returns:** JSON array of news items with title, summary, publication date, provider, URL, and thumbnail.
 
 ### `yfinance_search`

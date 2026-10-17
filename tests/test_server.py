@@ -49,6 +49,24 @@ async def test_get_ticker_info(server_params: StdioServerParameters) -> None:
         assert data["symbol"] == symbol
 
 
+@pytest.mark.asyncio
+async def test_news_rejects_markup(server_params: StdioServerParameters) -> None:
+    async with (
+        stdio_client(server_params) as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+        result = await session.call_tool("yfinance_get_ticker_news", {"symbol": "<b>tofu-poc</b>"})
+
+    assert not result.isError
+    assert len(result.content) == 1
+    assert isinstance(result.content[0], TextContent)
+    data = json.loads(result.content[0].text)
+    assert data["error_code"] == "INVALID_PARAMS"
+    assert "<b>tofu-poc</b>" not in result.model_dump_json()
+    assert "details" not in data
+
+
 # Removed slow integration test for get_top - replaced with unit tests below
 
 
