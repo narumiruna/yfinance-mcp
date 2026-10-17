@@ -14,7 +14,7 @@ classifiers     = [
 dependencies    = [
   "loguru>=0.7.3",
   "matplotlib>=3.11.2",
-  "mcp>=1.28.1,<2",
+  "mcp>=1.30.0,<2",
   # Required by pandas.DataFrame.to_markdown() for price history table output.
   "tabulate>=0.10.0",
   "yfinance>=1.7.0",
@@ -25,12 +25,12 @@ yfmcp = "yfmcp.server:main"
 
 [dependency-groups]
 dev = [
-  "mcp[cli]>=1.28.1,<2",
+  "mcp[cli]>=1.30.0,<2",
   "pytest>=9.1.1",
   "pytest-asyncio>=1.4.0",
   "pytest-cov>=7.1.0",
-  "ruff>=0.16.9",
-  "ty>=0.0.84",
+  "ruff>=0.17.1",
+  "ty>=0.0.89",
 ]
 
 [build-system]
