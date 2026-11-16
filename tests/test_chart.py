@@ -4,6 +4,7 @@ import base64
 
 import pandas as pd
 import pytest
+from mcp.types import ImageContent
 
 from yfmcp.chart import DEFAULT_CHART_DPI
 from yfmcp.chart import DEFAULT_VOLUME_PROFILE_BINS
@@ -59,6 +60,7 @@ def test_calculate_volume_profile_default_bins(sample_price_data: pd.DataFrame) 
 def test_generate_chart_volume_profile(sample_price_data: pd.DataFrame) -> None:
     """Test volume profile chart generation."""
     result = generate_chart("AAPL", sample_price_data, "volume_profile")
+    assert isinstance(result, ImageContent)
 
     # Check that result is ImageContent
     assert hasattr(result, "type")
@@ -75,6 +77,7 @@ def test_generate_chart_volume_profile(sample_price_data: pd.DataFrame) -> None:
 def test_generate_chart_price_volume(sample_price_data: pd.DataFrame) -> None:
     """Test price_volume chart generation."""
     result = generate_chart("AAPL", sample_price_data, "price_volume")
+    assert isinstance(result, ImageContent)
 
     # Check that result is ImageContent
     assert hasattr(result, "type")
@@ -89,6 +92,7 @@ def test_generate_chart_price_volume(sample_price_data: pd.DataFrame) -> None:
 def test_generate_chart_vwap(sample_price_data: pd.DataFrame) -> None:
     """Test VWAP chart generation."""
     result = generate_chart("AAPL", sample_price_data, "vwap")
+    assert isinstance(result, ImageContent)
 
     # Check that result is ImageContent
     assert hasattr(result, "type")

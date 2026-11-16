@@ -78,4 +78,4 @@ key-value-equals-sign-alignment = true
 trailing-comment-alignment      = true
 
 [tool.ty.rules]
-unresolved-attribute = "ignore"
+missing-attribute = "ignore"
