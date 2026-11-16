@@ -30,7 +30,7 @@ dev = [
   "pytest-asyncio>=1.4.1.post1",
   "pytest-cov>=7.1.0",
   "ruff>=0.17.4",
-  "ty>=0.0.97",
+  "ty>=0.0.104",
 ]
 
 [build-system]
@@ -78,4 +78,4 @@ key-value-equals-sign-alignment = true
 trailing-comment-alignment      = true
 
 [tool.ty.rules]
-unresolved-attribute = "ignore"
+missing-attribute = "ignore"

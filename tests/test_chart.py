@@ -4,6 +4,7 @@ import base64
 
 import pandas as pd
 import pytest
+from mcp.types import ImageContent
 
 from yfmcp.chart import DEFAULT_CHART_DPI
 from yfmcp.chart import DEFAULT_VOLUME_PROFILE_BINS
@@ -61,9 +62,8 @@ def test_generate_chart_volume_profile(sample_price_data: pd.DataFrame) -> None:
     result = generate_chart("AAPL", sample_price_data, "volume_profile")
 
     # Check that result is ImageContent
-    assert hasattr(result, "type")
+    assert isinstance(result, ImageContent)
     assert result.type == "image"
-    assert hasattr(result, "mimeType")
     assert result.mimeType == "image/webp"
 
     # Validate that a real WebP image was produced
@@ -77,9 +77,8 @@ def test_generate_chart_price_volume(sample_price_data: pd.DataFrame) -> None:
     result = generate_chart("AAPL", sample_price_data, "price_volume")
 
     # Check that result is ImageContent
-    assert hasattr(result, "type")
+    assert isinstance(result, ImageContent)
     assert result.type == "image"
-    assert hasattr(result, "mimeType")
     assert result.mimeType == "image/webp"
     assert isinstance(result.data, str)
     assert len(result.data) > 0
@@ -91,7 +90,7 @@ def test_generate_chart_vwap(sample_price_data: pd.DataFrame) -> None:
     result = generate_chart("AAPL", sample_price_data, "vwap")
 
     # Check that result is ImageContent
-    assert hasattr(result, "type")
+    assert isinstance(result, ImageContent)
     assert result.type == "image"
     assert isinstance(result.data, str)
     assert len(result.data) > 0

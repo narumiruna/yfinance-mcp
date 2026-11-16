@@ -119,7 +119,7 @@ def _plot_candlesticks(ax, df: pd.DataFrame, x: np.ndarray) -> np.ndarray:
     return colors
 
 
-def generate_chart(symbol: str, df: pd.DataFrame, chart_type: ChartType) -> ImageContent | str:
+def generate_chart(symbol: str, df: pd.DataFrame, chart_type: ChartType) -> ImageContent:
     """Generate a financial chart using matplotlib.
 
     Shows candlestick price data with volume, optionally with VWAP or volume profile.
